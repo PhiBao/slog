@@ -64,3 +64,8 @@ export const streakSchema = z.object({
   n: z.number().int().nonnegative(),
   last: z.number().int().nonnegative(),
 });
+
+export const practiceRecordSchema = z.object({
+  attempt: z.number().int().nonnegative(),
+  state: floorStateSchema,
+});

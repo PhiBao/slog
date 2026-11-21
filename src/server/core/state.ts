@@ -225,6 +225,15 @@ export async function hasMoveLeft(id: number, username: string): Promise<boolean
   return !(await redis.exists(keys.mover(id, username)));
 }
 
+/**
+ * Removes a user's move budget for a floor. Only valid in the same request
+ * that created the budget via trySpendMove — used to refund illegal actions
+ * so a stray tap never burns the daily move.
+ */
+export async function refundMove(id: number, username: string): Promise<void> {
+  await redis.del(keys.mover(id, username));
+}
+
 // ---------------------------------------------------------------------------
 // Optimistic concurrency — the trust core
 //
