@@ -63,6 +63,8 @@ export const floorSummarySchema = z.object({
 export const streakSchema = z.object({
   n: z.number().int().nonnegative(),
   last: z.number().int().nonnegative(),
+  /** floor id where the one-per-7-floors streak freeze was last used (0 = never) */
+  graceAt: z.number().int().nonnegative().default(0),
 });
 
 export const practiceRecordSchema = z.object({

@@ -51,7 +51,8 @@
   },
   "triggers": {
     "onAppInstall": "/internal/triggers/on-app-install",
-    "onAppUpgrade": "/internal/triggers/on-app-install"
+    "onAppUpgrade": "/internal/triggers/on-app-install",
+    "onCommentCreate": "/internal/triggers/on-comment-create"
   },
   "dev": {
     "subreddit": "slogslogslog_dev"

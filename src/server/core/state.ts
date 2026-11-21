@@ -272,14 +272,32 @@ export async function commitFloorUpdate(id: number, state: FloorState, log: Move
 // Streaks & practice bests
 // ---------------------------------------------------------------------------
 
-export type Streak = { n: number; last: number };
+export type Streak = { n: number; last: number; graceAt: number };
 
 export async function getStreak(username: string): Promise<Streak> {
-  return readJson(await redis.get(keys.streak(username)), streakSchema) ?? { n: 0, last: 0 };
+  return readJson(await redis.get(keys.streak(username)), streakSchema) ?? { n: 0, last: 0, graceAt: 0 };
 }
 
 export async function setStreak(username: string, streak: Streak): Promise<void> {
   await redis.set(keys.streak(username), JSON.stringify(streak));
+}
+
+/**
+ * Streak rule for the first applied move of a floor:
+ *   - consecutive floors: n + 1
+ *   - missed exactly one floor and the freeze hasn't been used in the last
+ *     7 floors: n + 1 and the freeze is recorded (grace)
+ *   - otherwise the streak starts fresh at 1
+ */
+export function nextStreak(streak: Streak, floorId: number): Streak {
+  if (streak.last === floorId) return streak;
+  if (streak.last === floorId - 1) {
+    return { n: streak.n + 1, last: floorId, graceAt: streak.graceAt };
+  }
+  if (streak.last === floorId - 2 && floorId - streak.graceAt >= 7) {
+    return { n: streak.n + 1, last: floorId, graceAt: floorId };
+  }
+  return { n: 1, last: floorId, graceAt: streak.graceAt };
 }
 
 export async function getBest(username: string): Promise<number | null> {

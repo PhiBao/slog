@@ -15,6 +15,7 @@ import {
   getFloorState,
   getStreak,
   hasMoveLeft,
+  nextStreak,
   openFloor,
   setBestIfLower,
   setStreak,
@@ -87,9 +88,24 @@ test("commitFloorUpdate writes state and log atomically", async () => {
 });
 
 test("streaks and practice bests persist", async () => {
-  expect(await getStreak("u_example")).toEqual({ n: 0, last: 0 });
-  await setStreak("u_example", { n: 3, last: 7 });
-  expect(await getStreak("u_example")).toEqual({ n: 3, last: 7 });
+  expect(await getStreak("u_example")).toEqual({ n: 0, last: 0, graceAt: 0 });
+  await setStreak("u_example", { n: 3, last: 7, graceAt: 0 });
+  expect(await getStreak("u_example")).toEqual({ n: 3, last: 7, graceAt: 0 });
+});
+
+test("nextStreak applies consecutive, grace, and reset rules", async () => {
+  // consecutive floors grow the streak
+  expect(nextStreak({ n: 3, last: 6, graceAt: 0 }, 7)).toEqual({ n: 4, last: 7, graceAt: 0 });
+  // missing exactly one floor uses the freeze (once per rolling 7 floors)
+  expect(nextStreak({ n: 4, last: 7, graceAt: 0 }, 9)).toEqual({ n: 5, last: 9, graceAt: 9 });
+  // a second miss inside the window resets to 1
+  expect(nextStreak({ n: 5, last: 9, graceAt: 9 }, 11)).toEqual({ n: 1, last: 11, graceAt: 9 });
+  // after the freeze window expires, missing exactly one floor grants a new grace
+  expect(nextStreak({ n: 5, last: 15, graceAt: 9 }, 17)).toEqual({ n: 6, last: 17, graceAt: 17 });
+  // missing many floors resets the streak regardless
+  expect(nextStreak({ n: 5, last: 9, graceAt: 9 }, 17)).toEqual({ n: 1, last: 17, graceAt: 9 });
+  // same floor participation never double-counts
+  expect(nextStreak({ n: 2, last: 7, graceAt: 0 }, 7)).toEqual({ n: 2, last: 7, graceAt: 0 });
 
   expect(await setBestIfLower("u_example", 42)).toBe(true);
   expect(await setBestIfLower("u_example", 31)).toBe(true);

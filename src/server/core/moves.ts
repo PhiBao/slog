@@ -13,15 +13,16 @@ import { hashString } from "../../shared/rng";
 import type { Action, FloorGen, FloorState, MoveLogEntry, Pos } from "../../shared/types";
 import { DIRECTIONS, isLegalMove, MAX_HP, tileAt } from "../../shared/types";
 import {
+  commitFloorUpdate,
+  ensureCurrentFloor,
   floorSeedFor,
   getFloorLog,
   getFloorState,
   getStreak,
-  refundMove,
+  nextStreak,
   setStreak,
   trySpendMove,
-  commitFloorUpdate,
-  ensureCurrentFloor,
+  refundMove,
 } from "./state";
 
 export type MoveEvent = "moved" | "shell" | "salt" | "cleared" | "failed";
@@ -149,9 +150,9 @@ export async function applySharedMove(username: string, action: Action, now: num
       // Streaks count floors with at least one applied move.
       const streak = await getStreak(username);
       if (streak.last !== id) {
-        const nextN = streak.last === id - 1 ? streak.n + 1 : 1;
-        await setStreak(username, { n: nextN, last: id });
-        return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: nextN };
+        const next = nextStreak(streak, id);
+        await setStreak(username, next);
+        return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: next.n };
       }
       return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: streak.n };
     }
