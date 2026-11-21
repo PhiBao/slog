@@ -38,6 +38,11 @@ triggers.post('/on-app-install', async (c) => {
 
 const WAR_ROOM_REPLY_CAP = 60; // per floor, keeps viral days sane
 
+/** Narrows a comment id to the literal type submitComment expects. */
+function isCommentId(id: string): id is `t1_${string}` {
+  return id.startsWith("t1_");
+}
+
 /**
  * The war-room bot: one status reply per snailherd per floor, only on the
  * arena posts of the last three floors. It gives commenters live board data
@@ -51,7 +56,7 @@ triggers.post('/on-comment-create', async (c) => {
     const author = input.author?.name;
     const postId = input.post?.id;
 
-    if (!comment || !author || !postId || author === 'slogslogslog') {
+    if (!comment || !author || !postId || !comment.id || !isCommentId(comment.id) || author === 'slogslogslog') {
       return c.json<TriggerResponse>({ status: 'ok' }, 200);
     }
 
