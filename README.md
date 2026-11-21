@@ -4,8 +4,8 @@
 
 - **Live game:** [open the arena post](https://www.reddit.com/r/slogslogslog_dev/comments/1y1qo2g/slog_floor_1_the_long_way_down/) (u/slogslogslog, r/slogslogslog_dev)
 - **Devvit app listing:** https://developers.reddit.com/apps/slogslogslog
-- **Demo video:** _≤60s clip linked here before submission_
-- **Public repo:** https://github.com/AnnualRadish6024/slog _(link added at submission; repo is this working directory)_
+- **Demo video:** not submitted (the event makes video optional); the live demo post is the primary artifact. A local fallback recording of the flow is kept at `docs/demo.mp4`.
+- **Public repo:** https://github.com/PhiBao/slog
 
 ## Try it in 60 seconds
 
