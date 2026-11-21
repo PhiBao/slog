@@ -40,8 +40,14 @@
   "triggers": {
     "onAppInstall": "/internal/triggers/on-app-install"
   },
+  "dev": {
+    "subreddit": "slogslogslog_dev"
+  },
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build"
+  },
+  "dev": {
+    "subreddit": "slogslogslog_dev"
   }
 }
