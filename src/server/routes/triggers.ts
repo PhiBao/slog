@@ -1,30 +1,31 @@
-import { context } from '@devvit/web/server';
 import { Hono } from 'hono';
 import type { OnAppInstallRequest, TriggerResponse } from '@devvit/web/shared';
 
-import { createPost } from '../core/post';
+import { rollDailyFloor } from '../core/daily';
 
 export const triggers = new Hono();
 
+/**
+ * On install/upgrade: make sure today's floor and its arena post exist.
+ * Idempotent — an upgrade mid-day will not create a second post.
+ */
 triggers.post('/on-app-install', async (c) => {
+  const input = await c.req.json<OnAppInstallRequest>();
   try {
-    const post = await createPost();
-
-    const input = await c.req.json<OnAppInstallRequest>();
-
+    const result = await rollDailyFloor(Date.now());
     return c.json<TriggerResponse>(
       {
         status: 'success',
-        message: `Post created in subreddit ${context.subredditName} with id ${post.id} (trigger: ${input.type})`,
+        message: `Floor #${result.id} arena post ${result.postId ?? 'pending'} (trigger: ${input.type})`,
       },
       200
     );
   } catch (error) {
-    console.error(`Error creating post: ${error}`);
+    console.error('on-app-install failed', error);
     return c.json<TriggerResponse>(
       {
         status: 'error',
-        message: 'Failed to create post',
+        message: 'Failed to roll the floor on install',
       },
       400
     );

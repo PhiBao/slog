@@ -23,13 +23,25 @@
   "menu": {
     "items": [
       {
-        "label": "Create a new post",
-        "description": "slogslogslog",
+        "label": "Post today's Slog floor",
+        "description": "Create today's arena post for Slog. Idempotent.",
         "location": "subreddit",
         "forUserType": "moderator",
-        "endpoint": "/internal/menu/post-create"
+        "endpoint": "/internal/scheduler/roll-floor"
       }
     ]
+  },
+  "scheduler": {
+    "tasks": {
+      "daily-floor": {
+        "endpoint": "/internal/scheduler/daily-floor",
+        "cron": "0 12 * * *"
+      },
+      "auto-advance": {
+        "endpoint": "/internal/scheduler/auto-advance",
+        "cron": "*/10 * * * *"
+      }
+    }
   },
   "permissions": {
     "reddit": {
@@ -38,7 +50,8 @@
     }
   },
   "triggers": {
-    "onAppInstall": "/internal/triggers/on-app-install"
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onAppUpgrade": "/internal/triggers/on-app-install"
   },
   "dev": {
     "subreddit": "slogslogslog_dev"

@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+type SplashData = {
+  id: number;
+  flavor: string;
+  status: string;
+  moves: number;
+  hp: number;
+  endsAt: number;
+};
+
 let requestExpandedModeMock: ReturnType<typeof vi.fn>;
-let splashQueryMock: ReturnType<typeof vi.fn>;
+let splashQueryMock: (() => Promise<SplashData>) | undefined;
 
 vi.mock('@devvit/web/client', () => {
   requestExpandedModeMock = vi.fn();
@@ -20,13 +29,12 @@ vi.mock('./trpc', () => {
     endsAt: Date.UTC(2026, 10, 22, 12, 0, 0),
   });
   return {
-    trpc: { splash: { query: () => splashQueryMock() } },
+    trpc: { splash: { query: () => splashQueryMock?.() } },
   };
 });
 
 afterEach(() => {
   requestExpandedModeMock?.mockReset();
-  splashQueryMock?.mockReset();
 });
 
 describe('Splash', () => {
@@ -48,13 +56,15 @@ describe('Splash', () => {
       expect(el).toBeTruthy();
       return el;
     });
+    if (!floorInfo) throw new Error('floor info element missing');
     expect(floorInfo.textContent).toContain('the soggy gallery');
 
     const startButton = Array.from(document.querySelectorAll('button')).find((b) =>
       /spend today/i.test(b.textContent ?? '')
     );
     expect(startButton).toBeTruthy();
-    startButton!.click();
+    if (!startButton) throw new Error('start button missing');
+    startButton.click();
 
     expect(requestExpandedModeMock).toHaveBeenCalledTimes(1);
     const arg = requestExpandedModeMock.mock.calls[0]?.[1];

@@ -46,6 +46,7 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchFloor();
     const timer = setInterval(() => {
       if (!practiceRef.current) void fetchFloor();
