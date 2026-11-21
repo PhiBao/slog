@@ -1,4 +1,7 @@
 import './index.css';
+import '@fontsource/silkscreen/400.css';
+import '@fontsource/nunito/400.css';
+import '@fontsource/nunito/700.css';
 
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,7 +10,8 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../server/trpc';
 import { trpc } from './trpc';
 import { Board } from './game/board';
-import type { Action } from '../shared/types';
+import type { Action, Pos } from '../shared/types';
+import { DIRECTIONS } from '../shared/types';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type FloorView = RouterOutputs['floor'];
@@ -32,6 +36,7 @@ export const App = () => {
   const [practice, setPractice] = useState<PracticeView | null>(null);
   const [archive, setArchive] = useState<ArchiveEntry[] | null>(null);
   const [showArchive, setShowArchive] = useState(false);
+  const [saltFlash, setSaltFlash] = useState(false);
   const practiceRef = useRef(false);
 
   const fetchFloor = useCallback(async () => {
@@ -40,7 +45,7 @@ export const App = () => {
       setFloor(data);
       setError(null);
     } catch (e) {
-      console.error("floor query failed", e);
+      console.error('floor query failed', e);
       setError(e instanceof Error ? e.message : 'The cavern hiccuped. Retrying…');
     }
   }, []);
@@ -53,6 +58,12 @@ export const App = () => {
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [fetchFloor]);
+
+  useEffect(() => {
+    if (!saltFlash) return;
+    const t = setTimeout(() => setSaltFlash(false), 450);
+    return () => clearTimeout(t);
+  }, [saltFlash]);
 
   const spendMove = async (action: Action) => {
     if (moving) return;
@@ -69,16 +80,21 @@ export const App = () => {
       switch (result.kind) {
         case 'applied':
           setFloor((prev) =>
-            prev ? { ...prev, state: result.state, log: result.log, yourMoveLeft: false, streak: result.streak } : prev
+            prev
+              ? { ...prev, state: result.state, log: result.log, yourMoveLeft: false, streak: result.streak }
+              : prev
           );
-          if (result.event === 'salt') setNotice('🧂 Salt! Slog lost a heart. The log remembers.');
+          if (result.event === 'salt') {
+            setNotice('🧂 Salt! Slog lost a heart. The log remembers who.');
+            setSaltFlash(true);
+          }
           if (result.event === 'cleared') setNotice('🏁 The burrow! Today’s floor is CLEARED by everyone who moved.');
-          if (result.event === 'failed') setNotice('💀 Out of hearts — Slog tucks in. Tomorrow we try again.');
+          if (result.event === 'failed') setNotice('💀 Out of hearts — Slog tucks into his shell. Tomorrow we try again.');
           if (result.event === 'shell') setNotice('🛡️ Slog rests in his shell. +1 heart.');
           break;
         case 'already-moved':
           setFloor((prev) => (prev ? { ...prev, state: result.state, log: result.log, yourMoveLeft: false } : prev));
-          setNotice('Your move is spent for today — you’re in the log. Watch the hive work.');
+          setNotice('Your move is spent — you’re in today’s log. Watch the hive work. 🐌');
           break;
         case 'illegal':
           setFloor((prev) => (prev ? { ...prev, state: result.state, log: result.log, yourMoveLeft: true } : prev));
@@ -93,8 +109,9 @@ export const App = () => {
         default:
           setNotice('Sign in to steer Slog.');
       }
-    } catch {
-      setError('The cavern hiccuped. Try again.');
+    } catch (e) {
+      console.error('move failed', e);
+      setError(e instanceof Error ? e.message : 'The cavern hiccuped. Try again.');
     } finally {
       setMoving(false);
     }
@@ -104,7 +121,7 @@ export const App = () => {
     const view = await trpc.practice.query();
     setPractice(view);
     practiceRef.current = true;
-    setNotice('Training Tunnel: unlimited moves, no effect on the shared run.');
+    setNotice('Training Tunnel — unlimited moves, no effect on the shared run.');
   };
 
   const exitPractice = () => {
@@ -127,11 +144,12 @@ export const App = () => {
 
   if (error && !floor && !practice) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#2A1E3F] p-6 text-[#F2ECDF]">
-        <div className="text-center">
-          <p className="text-lg">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-cavern p-6 text-parchment">
+        <div className="panel max-w-sm rounded-lg p-5 text-center">
+          <p className="font-display text-base text-amber">THE CAVERN HICCUPED</p>
+          <p className="mt-2 text-sm text-parchment/80">{error}</p>
           <button
-            className="mt-4 cursor-pointer rounded-full bg-[#FFB84D] px-5 py-2 text-[#241B35]"
+            className="btn-pixel mt-4 cursor-pointer rounded-lg bg-amber px-5 py-2 font-bold text-ink"
             onClick={() => void fetchFloor()}
           >
             Retry
@@ -143,8 +161,8 @@ export const App = () => {
 
   if (!floor && !practice) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#2A1E3F] text-[#F2ECDF]">
-        <p className="animate-pulse text-lg">Unrolling the map…</p>
+      <div className="flex min-h-screen items-center justify-center bg-cavern text-parchment">
+        <p className="bob font-display text-sm text-salt">Unrolling the map…</p>
       </div>
     );
   }
@@ -152,22 +170,22 @@ export const App = () => {
   // --- practice mode render ---
   if (practice) {
     return (
-      <div className="flex min-h-screen flex-col items-center gap-3 bg-[#2A1E3F] p-3 text-[#F2ECDF]">
+      <div className="flex min-h-screen flex-col items-center gap-3 bg-cavern p-3 text-parchment">
         <header className="text-center">
-          <p className="text-sm text-[#52D6C8]">
-            TRAINING TUNNEL · unlimited moves · best: {practice.best ? `${practice.best} moves` : '—'}
+          <p className="font-display text-xs text-slime">
+            TRAINING TUNNEL · UNLIMITED MOVES · BEST: {practice.best ? `${practice.best} MOVES` : '—'}
           </p>
         </header>
         <Board gen={practice.gen} hero={practice.state.hero} size={boardSize()} />
         <Hearts hp={practice.state.hp} />
         <Controls onMove={spendMove} disabled={moving || practice.state.status !== 'open'} />
-        {notice && <p className="max-w-md text-center text-sm text-[#FFB84D]">{notice}</p>}
+        {notice && <p className="max-w-md text-center text-sm text-amber">{notice}</p>}
         <div className="flex gap-3 text-sm">
-          <button className="cursor-pointer rounded-full bg-[#FFB84D] px-4 py-2 text-[#241B35]" onClick={resetPracticeTunnel}>
+          <button className="btn-pixel cursor-pointer rounded-lg bg-amber px-4 py-2 font-bold text-ink" onClick={resetPracticeTunnel}>
             New tunnel
           </button>
           <button
-            className="cursor-pointer rounded-full border border-[#52D6C8] px-4 py-2 text-[#52D6C8]"
+            className="btn-pixel cursor-pointer rounded-lg border-2 border-slime px-4 py-2 font-bold text-slime"
             onClick={exitPractice}
           >
             ← Back to the shared floor
@@ -180,55 +198,66 @@ export const App = () => {
   // --- shared floor render ---
   if (!floor) return null;
   const closed = floor.state.status !== 'open';
+  const movers = new Set(floor.log.filter((e) => e.u !== 'Slog').map((e) => e.u)).size;
 
   return (
-    <div className="flex min-h-screen flex-col items-center gap-3 bg-[#2A1E3F] p-3 text-[#F2ECDF]">
-      <header className="flex w-full max-w-xl items-center justify-between gap-2 text-center">
-        <span className="text-sm font-semibold">
-          FLOOR #{floor.id} · {floor.gen.flavor}
+    <div className="flex min-h-screen flex-col items-center gap-3 bg-cavern p-3 text-parchment">
+      <header className="flex w-full max-w-xl items-center justify-between gap-3 rounded-lg bg-cavern-mid px-3 py-2">
+        <span className="font-display text-sm text-amber">
+          FLOOR #{floor.id}
+          <span className="ml-2 text-xs font-normal text-parchment/60">{floor.gen.flavor}</span>
         </span>
         <Hearts hp={floor.state.hp} />
-        <span className="text-sm">
-          {floor.state.moves} moves
+        <span className="font-display text-xs text-parchment/70">
+          {floor.state.moves} MOVES · {movers} SNAILHERDS
         </span>
       </header>
 
-      <Board gen={floor.gen} hero={floor.state.hero} size={boardSize()} />
+      <Board gen={floor.gen} hero={floor.state.hero} size={boardSize()} trail={trailFrom(floor)} saltFlash={saltFlash} />
 
       {closed ? (
         <EndCard
           cleared={floor.state.status === 'cleared'}
           moves={floor.state.moves}
+          movers={movers}
           deaths={floor.state.deaths}
           streak={floor.streak}
           onPractice={enterPractice}
         />
       ) : (
         <>
-          <p className="text-sm">
+          <p
+            className={
+              floor.yourMoveLeft
+                ? 'rounded-full bg-slime/15 px-4 py-1 text-center text-sm font-bold text-slime'
+                : 'rounded-full bg-cavern-light px-4 py-1 text-center text-sm text-parchment/80'
+            }
+          >
             {floor.yourMoveLeft
               ? 'You have 1 move today. Spend it wisely.'
-              : 'Your move is spent. You’re in today’s log. 🐌'}
+              : 'Your move is spent — you’re in today’s log. 🐌'}
           </p>
           <Controls onMove={spendMove} disabled={moving || !floor.yourMoveLeft} />
         </>
       )}
 
-      {notice && <p className="max-w-md text-center text-sm text-[#FFB84D]">{notice}</p>}
-      {error && <p className="text-sm text-[#E4586B]">{error}</p>}
+      {notice && <p className="max-w-md text-center text-sm text-amber">{notice}</p>}
+      {error && <p className="text-sm text-rose">{error}</p>}
 
-      <LogView log={floor.log.slice(-5).reverse()} you={floor.username} />
+      <LogView log={floor.log.slice(-6).reverse()} you={floor.username} />
 
       <footer className="flex flex-wrap items-center justify-center gap-3 text-sm">
-        <span className="text-[#FFB84D]">🔥 {floor.streak}</span>
+        <span className="font-display text-amber" title="Your streak of floors with a move">
+          🔥 {floor.streak}
+        </span>
         <button
-          className="cursor-pointer rounded-full border border-[#52D6C8] px-3 py-1 text-[#52D6C8]"
+          className="btn-pixel cursor-pointer rounded-lg border-2 border-slime px-3 py-1 font-bold text-slime"
           onClick={enterPractice}
         >
           Training Tunnels →
         </button>
         <button
-          className="cursor-pointer rounded-full border border-[#8C7AA9] px-3 py-1 text-[#8C7AA9]"
+          className="btn-pixel cursor-pointer rounded-lg border-2 border-stone px-3 py-1 font-bold text-stone"
           onClick={openArchive}
         >
           Past floors
@@ -236,56 +265,68 @@ export const App = () => {
       </footer>
 
       {showArchive && archive && (
-        <ol className="max-w-xl text-xs text-[#F2ECDF]/80">
+        <ol className="max-w-xl text-xs text-parchment/80">
           {archive.length === 0 && <li className="py-1">No floors archived yet — we’re just starting.</li>}
           {archive.map((entry) => (
             <li key={entry.id} className="py-0.5">
-              #{entry.id} · {entry.status} · {entry.moves} moves · {entry.movers} snailherds · {entry.deaths} salt ·{' '}
-              {entry.flavor}
+              <span className="font-display text-amber">#{entry.id}</span> · {entry.status} · {entry.moves} moves ·{' '}
+              {entry.movers} snailherds · {entry.deaths} salt · {entry.flavor}
             </li>
           ))}
         </ol>
       )}
+
+      <p className="text-[10px] text-parchment/40">New floor every day at 12:00 UTC · argue the next move in the comments ↓</p>
     </div>
   );
 };
 
+/** Replays the (uncapped) log from the entrance to derive the slime trail. */
+function trailFrom(floor: FloorView): Pos[] {
+  if (floor.log.length >= 250) return [];
+  let pos: Pos = { ...floor.gen.entrance };
+  const visited: Pos[] = [];
+  for (const entry of floor.log) {
+    if (entry.action === 'shell') continue;
+    const d = DIRECTIONS[entry.action];
+    const next: Pos = { x: pos.x + d.x, y: pos.y + d.y };
+    if (next.x < 0 || next.y < 0 || next.x >= floor.gen.width || next.y >= floor.gen.height) break;
+    pos = next;
+    visited.push({ ...pos });
+  }
+  return visited.slice(-40);
+}
+
 function Hearts({ hp }: { hp: number }) {
   return (
-    <span className="text-[#E4586B]" aria-label={`${hp} hearts`}>
+    <span className="text-rose" aria-label={`${hp} hearts`}>
       {'♥'.repeat(Math.max(hp, 0))}
-      <span className="text-[#F2ECDF]/25">{'♥'.repeat(Math.max(3 - hp, 0))}</span>
+      <span className="text-parchment/25">{'♥'.repeat(Math.max(3 - hp, 0))}</span>
     </span>
   );
 }
 
-function Controls({
-  onMove,
-  disabled,
-}: {
-  onMove: (action: Action) => void;
-  disabled: boolean;
-}) {
-  const btn =
-    'flex h-12 w-16 cursor-pointer items-center justify-center rounded-lg bg-[#574078] text-xl text-[#F2ECDF] transition-colors hover:bg-[#8C7AA9] disabled:cursor-not-allowed disabled:opacity-40';
+function Controls({ onMove, disabled }: { onMove: (action: Action) => void; disabled: boolean }) {
+  const dir =
+    'btn-pixel flex h-14 w-14 cursor-pointer items-center justify-center rounded-lg bg-cavern-light font-display text-2xl text-parchment hover:bg-stone';
   return (
     <div className="flex items-center gap-2">
-      <button className={btn} disabled={disabled} onClick={() => onMove('left')} aria-label="Move left">
+      <button className={dir} disabled={disabled} onClick={() => onMove('left')} aria-label="Move left">
         ←
       </button>
       <div className="flex flex-col gap-2">
-        <button className={btn} disabled={disabled} onClick={() => onMove('up')} aria-label="Move up">
+        <button className={dir} disabled={disabled} onClick={() => onMove('up')} aria-label="Move up">
           ↑
         </button>
-        <button className={btn} disabled={disabled} onClick={() => onMove('down')} aria-label="Move down">
+        <button className={dir} disabled={disabled} onClick={() => onMove('down')} aria-label="Move down">
           ↓
         </button>
       </div>
-      <button className={btn} disabled={disabled} onClick={() => onMove('right')} aria-label="Move right">
+      <button className={dir} disabled={disabled} onClick={() => onMove('right')} aria-label="Move right">
         →
       </button>
       <button
-        className="flex h-12 cursor-pointer items-center justify-center rounded-lg border border-[#52D6C8] px-3 text-[#52D6C8] disabled:cursor-not-allowed disabled:opacity-40"
+        className="btn-pixel flex h-14 cursor-pointer items-center justify-center rounded-lg border-2 border-slime px-3 font-bold text-slime"
         disabled={disabled}
         onClick={() => onMove('shell')}
         aria-label="Rest in shell"
@@ -299,11 +340,11 @@ function Controls({
 function LogView({ log, you }: { log: FloorView['log']; you: string | null }) {
   return (
     <div className="max-w-xl text-xs">
-      <p className="mb-1 text-[#52D6C8]">Recent moves</p>
-      {log.length === 0 && <p className="text-[#F2ECDF]/50">No moves yet today. Be the first snailherd.</p>}
+      <p className="mb-1 font-display text-slime">RECENT MOVES</p>
+      {log.length === 0 && <p className="text-parchment/50">No moves yet today. Be the first snailherd.</p>}
       {log.map((entry, i) => (
-        <p key={`${entry.t}-${i}`} className={entry.u === you ? 'text-[#52D6C8]' : 'text-[#F2ECDF]/70'}>
-          u/{entry.u} {directionGlyph[entry.action]}
+        <p key={`${entry.t}-${i}`} className={entry.u === you ? 'font-bold text-slime' : 'text-parchment/70'}>
+          {entry.u === 'Slog' ? '🐌 Slog crawled on his own' : `u/${entry.u}`} {entry.u === 'Slog' ? '' : directionGlyph[entry.action]}
         </p>
       ))}
     </div>
@@ -313,27 +354,29 @@ function LogView({ log, you }: { log: FloorView['log']; you: string | null }) {
 function EndCard({
   cleared,
   moves,
+  movers,
   deaths,
   streak,
   onPractice,
 }: {
   cleared: boolean;
   moves: number;
+  movers: number;
   deaths: number;
   streak: number;
   onPractice: () => void;
 }) {
   return (
-    <div className="max-w-xl rounded-lg border-2 border-[#FFB84D] bg-[#3B2A56] p-4 text-center">
-      <p className="text-lg font-bold text-[#FFB84D]">
+    <div className="panel max-w-xl rounded-lg p-4 text-center">
+      <p className="font-display text-lg text-amber">
         {cleared ? 'FLOOR CLEARED 🏁' : 'THE FLOOR WINS TODAY 💀'}
       </p>
-      <p className="mt-1 text-sm text-[#F2ECDF]/80">
-        {moves} moves · {deaths} salt incidents · your streak 🔥 {streak}
+      <p className="mt-1 text-sm text-parchment/80">
+        {moves} moves · {movers} snailherds · {deaths} salt incidents · your streak 🔥 {streak}
       </p>
-      <p className="mt-1 text-sm text-[#F2ECDF]/70">See you at noon UTC.</p>
+      <p className="mt-1 text-sm text-parchment/60">See you at noon UTC. Mourn or gloat in the comments ↓</p>
       <div className="mt-3 flex justify-center gap-3 text-sm">
-        <button className="cursor-pointer rounded-full bg-[#FFB84D] px-4 py-2 text-[#241B35]" onClick={onPractice}>
+        <button className="btn-pixel cursor-pointer rounded-lg bg-amber px-4 py-2 font-bold text-ink" onClick={onPractice}>
           Practice in the Training Tunnels →
         </button>
       </div>

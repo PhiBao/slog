@@ -1,1 +1,82 @@
 @import 'tailwindcss';
+
+/*
+ * Slog design tokens — cozy pixel-archaeology.
+ * All values mirror DESIGN.md in the build package.
+ */
+@theme {
+  --color-cavern: #2a1e3f;
+  --color-cavern-mid: #3b2a56;
+  --color-cavern-light: #574078;
+  --color-stone: #8c7aa9;
+  --color-stone-dark: #6e5b8f;
+  --color-amber: #ffb84d;
+  --color-amber-deep: #c98a2e;
+  --color-moss: #7fb069;
+  --color-moss-dark: #5a8a4a;
+  --color-slime: #52d6c8;
+  --color-salt: #f4f1ea;
+  --color-salt-shadow: #c9c4b8;
+  --color-parchment: #f2ecdf;
+  --color-ink: #241b35;
+  --color-rose: #e4586b;
+
+  --font-display: 'Silkscreen', 'Courier New', monospace;
+  --font-body: 'Nunito', system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-cavern);
+    color: var(--color-parchment);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+  }
+
+  /* pixel-step border for panels: chunky, 2px, amber or parchment */
+  .panel {
+    border: 2px solid var(--color-amber);
+    background: var(--color-cavern-mid);
+    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .btn-pixel {
+    box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 0.4);
+    transition: transform 80ms ease-out, box-shadow 80ms ease-out;
+  }
+  .btn-pixel:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 0 rgba(0, 0, 0, 0.4);
+  }
+  .btn-pixel:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* the snail's idle bob for titles */
+  .bob {
+    animation: bob 2.4s ease-in-out infinite;
+  }
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bob {
+      animation: none;
+    }
+  }
+}

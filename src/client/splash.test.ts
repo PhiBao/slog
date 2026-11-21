@@ -52,7 +52,7 @@ describe('Splash', () => {
     expect(document.body.textContent).toContain('one brave snail');
 
     const floorInfo = await vi.waitFor(() => {
-      const el = Array.from(document.querySelectorAll('p')).find((p) => /Floor #47/.test(p.textContent ?? ''));
+      const el = Array.from(document.querySelectorAll('p')).find((p) => /floor #47/i.test(p.textContent ?? ''));
       expect(el).toBeTruthy();
       return el;
     });
