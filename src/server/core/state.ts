@@ -341,6 +341,24 @@ export async function rateLimit(key: string, max: number, windowMs: number): Pro
   return n <= max;
 }
 
+/**
+ * Short-lived serialization mutex. Never released manually — the 2s TTL
+ * expires on its own, which avoids stale-token release races. Combined with
+ * the WATCH commit this guarantees concurrent moves cannot lose updates.
+ */
+export async function acquireMoveTurn(id: number, now: number): Promise<string | null> {
+  const token = `${now}-${Math.random().toString(36).slice(2)}`;
+  const result = await redis.set(`slog:floor:${id}:turn`, token, { nx: true, expiration: new Date(now + 2000) });
+  return result === "OK" ? token : null;
+}
+
+/** Releases our own turn; a stale token can never delete a newer holder's lock. */
+export async function releaseMoveTurn(id: number, token: string): Promise<void> {
+  const key = `slog:floor:${id}:turn`;
+  const current = await redis.get(key);
+  if (current === token) await redis.del(key);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

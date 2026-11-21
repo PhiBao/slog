@@ -17,11 +17,15 @@ import { DIRECTIONS, isLegalMove, MAX_HP, tileAt } from "../../shared/types";
 import {
   commitFloorUpdate,
   ensureCurrentFloor,
+  floorIdAt,
   floorSeedFor,
   getFloorLog,
   getFloorState,
   getStreak,
   nextStreak,
+  acquireMoveTurn,
+  releaseMoveTurn,
+  setFloorLastMoveAt,
   setSnoo,
   setStreak,
   trySpendMove,
@@ -107,68 +111,87 @@ export type MoveResult =
  * from the request context — never a client-supplied name.
  */
 export async function applySharedMove(username: string, action: Action, now: number): Promise<MoveResult> {
-  const { id, gen, state } = await ensureCurrentFloor(now);
-
-  const view = async (): Promise<{ state: FloorState; log: MoveLogEntry[]; streak: number }> => {
-    const fresh = (await getFloorState(id)) ?? state;
-    const log = await getFloorLog(id);
-    const streak = await getStreak(username);
-    return { state: fresh, log, streak: streak.n };
-  };
-
-  if (state.status !== "open") {
-    const v = await view();
-    return { kind: "closed", id, ...v };
+  // Serialize move application: the WATCH commit is the correctness layer,
+  // this short-TTL mutex keeps concurrent writers from racing in practice.
+  let turn: string | null = null;
+  for (let i = 0; i < 14; i++) {
+    turn = await acquireMoveTurn(floorIdAt(now), now);
+    if (turn) break;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  if (!turn) {
+    const { id, state } = await ensureCurrentFloor(now);
+    return { kind: "busy", id, state, log: await getFloorLog(id), streak: (await getStreak(username)).n };
   }
 
-  // One shared move per user per floor — the SETNX budget is the law.
-  const spent = await trySpendMove(id, username, now);
-  if (!spent) {
-    const v = await view();
-    return { kind: "already-moved", id, ...v };
-  }
+  try {
+    const { id, gen, state } = await ensureCurrentFloor(now);
 
-  for (let attempt = 0; attempt < RETRIES; attempt++) {
-    const current = (await getFloorState(id)) ?? state;
-    const outcome = applyAction(gen, current, action, now);
+    const view = async (): Promise<{ state: FloorState; log: MoveLogEntry[]; streak: number }> => {
+      const fresh = (await getFloorState(id)) ?? state;
+      const log = await getFloorLog(id);
+      const streak = await getStreak(username);
+      return { state: fresh, log, streak: streak.n };
+    };
 
-    if (!outcome.ok) {
-      if (outcome.reason === "illegal") {
-        // Refund: an illegal action never happened and must not burn the move.
-        await refundMove(id, username);
-        const v = await view();
-        return { kind: "illegal", id, ...v, message: "That way is solid rock — your move is safe for today." };
-      }
+    if (state.status !== "open") {
       const v = await view();
       return { kind: "closed", id, ...v };
     }
 
-    const entry: MoveLogEntry = { u: username, action, t: now };
-    const log = await getFloorLog(id);
-    log.push(entry);
-    if (log.length > LOG_CAP) log.splice(0, log.length - LOG_CAP);
-
-    const commit = await commitFloorUpdate(id, outcome.state, log);
-    if (commit === "committed") {
-      // Streaks count floors with at least one applied move.
-      const streak = await getStreak(username);
-      if (streak.last !== id) {
-        const next = nextStreak(streak, id);
-        await setStreak(username, next);
-        // Native identity extras — best-effort, never block the move (T14/T15).
-        await applyIdentityExtras(username, next.n);
-        return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: next.n };
-      }
-      return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: streak.n };
-    }
-    if (commit === "error") {
+    // One shared move per user per floor — the SETNX budget is the law.
+    const spent = await trySpendMove(id, username, now);
+    if (!spent) {
       const v = await view();
-      return { kind: "busy", id, ...v };
+      return { kind: "already-moved", id, ...v };
     }
-    // conflict → retry the read-validate-commit cycle
+
+    for (let attempt = 0; attempt < RETRIES; attempt++) {
+      const current = (await getFloorState(id)) ?? state;
+      const outcome = applyAction(gen, current, action, now);
+
+      if (!outcome.ok) {
+        if (outcome.reason === "illegal") {
+          // Refund: an illegal action never happened and must not burn the move.
+          await refundMove(id, username);
+          const v = await view();
+          return { kind: "illegal", id, ...v, message: "That way is solid rock — your move is safe for today." };
+        }
+        const v = await view();
+        return { kind: "closed", id, ...v };
+      }
+
+      const entry: MoveLogEntry = { u: username, action, t: now };
+      const log = await getFloorLog(id);
+      log.push(entry);
+      if (log.length > LOG_CAP) log.splice(0, log.length - LOG_CAP);
+
+      const commit = await commitFloorUpdate(id, outcome.state, log);
+      if (commit === "committed") {
+        // A human move resets the idle clock — Slog only crawls when alone.
+        await setFloorLastMoveAt(id, now);
+        // Streaks count floors with at least one applied move.
+        const streak = await getStreak(username);
+        if (streak.last !== id) {
+          const next = nextStreak(streak, id);
+          await setStreak(username, next);
+          // Native identity extras — best-effort, never block the move (T14/T15).
+          await applyIdentityExtras(username, next.n);
+          return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: next.n };
+        }
+        return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: streak.n };
+      }
+      if (commit === "error") {
+        const v = await view();
+        return { kind: "busy", id, ...v };
+      }
+      // conflict → retry the read-validate-commit cycle
+    }
+    const v = await view();
+    return { kind: "busy", id, ...v };
+  } finally {
+    await releaseMoveTurn(floorIdAt(now), turn);
   }
-  const v = await view();
-  return { kind: "busy", id, ...v };
 }
 
 // ---------------------------------------------------------------------------
