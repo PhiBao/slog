@@ -1,60 +1,48 @@
 import './index.css';
 
-import { navigateTo } from '@devvit/web/client';
-import { context, requestExpandedMode } from '@devvit/web/client';
-import { StrictMode } from 'react';
+import { requestExpandedMode } from '@devvit/web/client';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { trpc } from './trpc';
+
+/**
+ * Splash — the inline card people see in their feed.
+ * Kept intentionally fast: one light query, no board, no fonts beyond the
+ * system stack until the expanded view opens.
+ */
 export const Splash = () => {
+  const [info, setInfo] = useState<{ id: number; flavor: string; status: string; moves: number; hp: number } | null>(
+    null
+  );
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    trpc.splash
+      .query()
+      .then(setInfo)
+      .catch(() => setInfo(null));
+  }, []);
+
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center gap-4 bg-white dark:bg-gray-900">
-      <img
-        className="mx-auto w-1/2 max-w-[250px] object-contain"
-        src="/snoo.png"
-        alt="Snoo"
-      />
-      <div className="flex flex-col items-center gap-2">
-        <h1 className="text-center text-2xl font-bold text-gray-900 dark:text-white">
-          Hey {context.username ?? 'user'} 👋
-        </h1>
-        <p className="text-center text-base text-gray-600 dark:text-gray-300">
-          Edit{' '}
-          <span className="rounded bg-[#e5ebee] px-1 py-0.5 dark:bg-gray-700">
-            src/client/splash.tsx
-          </span>{' '}
-          to get started.
+    <div className="flex min-h-[280px] w-full flex-col items-center justify-center gap-2 bg-[#2A1E3F] px-4 py-6 text-[#F2ECDF]">
+      <p className="text-xs tracking-widest text-[#52D6C8]">THE DAILY SHARED DUNGEON</p>
+      <h1 className="text-3xl font-black tracking-tight text-[#FFB84D]">SLOG</h1>
+      <p className="max-w-sm text-center text-sm text-[#F2ECDF]/80">
+        All of Reddit steers one brave snail through the Undervault — one move each.
+      </p>
+      {info && (
+        <p className="mt-1 text-xs text-[#8C7AA9]">
+          Floor #{info.id} · {info.flavor} · {info.moves} moves · {info.status === 'open' ? 'in progress' : info.status}
         </p>
-      </div>
-      <div className="mt-5 flex items-center justify-center">
-        <button
-          className="flex h-10 w-auto cursor-pointer items-center justify-center rounded-full bg-[#d93900] px-4 text-white transition-colors hover:bg-[#c23300] dark:bg-orange-600 dark:hover:bg-orange-700"
-          onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
-        >
-          Tap to Start
-        </button>
-      </div>
-      <footer className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-3 text-[0.8em] text-gray-600 dark:text-gray-400">
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://developers.reddit.com/docs')}
-        >
-          Docs
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://www.reddit.com/r/Devvit')}
-        >
-          r/Devvit
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://discord.com/invite/R7yu2wh9Qz')}
-        >
-          Discord
-        </button>
-      </footer>
+      )}
+      <button
+        className="mt-3 cursor-pointer rounded-full bg-[#FFB84D] px-6 py-2.5 font-bold text-[#241B35] transition-transform hover:scale-105"
+        onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
+      >
+        🐌 Spend today’s move
+      </button>
+      <p className="mt-1 text-[10px] text-[#8C7AA9]">New floor at 12:00 UTC</p>
     </div>
   );
 };

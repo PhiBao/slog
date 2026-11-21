@@ -1,9 +1,12 @@
 import { initTRPC } from '@trpc/server';
-import { transformer } from '../shared/transformer';
-import { Context } from './context';
-import { context, reddit } from '@devvit/web/server';
-import { countDecrement, countGet, countIncrement } from './core/count';
 import { z } from 'zod';
+import { reddit } from '@devvit/web/server';
+
+import { transformer } from '../shared/transformer';
+import type { Context } from './context';
+import { applySharedMove } from './core/moves';
+import { getPractice, movePractice, resetPractice } from './core/practice';
+import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt } from './core/state';
 
 /**
  * Initialization of tRPC backend
@@ -20,45 +23,100 @@ const t = initTRPC.context<Context>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-export const appRouter = t.router({
-  init: t.router({
-    get: publicProcedure.query(async () => {
-      const [count, username] = await Promise.all([
-        countGet(),
-        reddit.getCurrentUsername(),
-      ]);
+const actionSchema = z.enum(['up', 'down', 'left', 'right', 'shell']);
 
-      return {
-        count,
-        postId: context.postId,
-        username,
-      };
-    }),
+export const appRouter = t.router({
+  /**
+   * Light payload for the inline feed card (splash entrypoint) — no board,
+   * no log: just enough to make the feed card alive and clickable.
+   */
+  splash: publicProcedure.query(async () => {
+    const now = Date.now();
+    const { id, gen, state } = await ensureCurrentFloor(now);
+    return {
+      id,
+      flavor: gen.flavor,
+      status: state.status,
+      moves: state.moves,
+      hp: state.hp,
+      endsAt: floorEndsAt(id),
+    };
   }),
-  counter: t.router({
-    increment: publicProcedure
-      .input(z.number().optional())
-      .mutation(async ({ input }) => {
-        const { postId } = context;
-        return {
-          count: await countIncrement(input),
-          postId,
-          type: 'increment',
-        };
-      }),
-    decrement: publicProcedure
-      .input(z.number().optional())
-      .mutation(async ({ input }) => {
-        const { postId } = context;
-        return {
-          count: await countDecrement(input),
-          postId,
-          type: 'decrement',
-        };
-      }),
-    get: publicProcedure.query(async () => {
-      return await countGet();
+
+  /**
+   * Everything the client needs to render the current shared floor.
+   * Identity comes from the platform — the client never asserts a username.
+   */
+  floor: publicProcedure.query(async () => {
+    const now = Date.now();
+    const username = await reddit.getCurrentUsername();
+    const { id, gen, state } = await ensureCurrentFloor(now);
+
+    if (!username) {
+      return { id, gen, state, log: await getFloorLog(id), username: null, yourMoveLeft: false, streak: 0 };
+    }
+
+    const [log, yourMoveLeft, streak] = await Promise.all([
+      getFloorLog(id),
+      hasMoveLeft(id, username),
+      getStreak(username),
+    ]);
+    return { id, gen, state, log, username, yourMoveLeft, streak: streak.n };
+  }),
+
+  /**
+   * Applies the user's one shared move for today's floor.
+   */
+  move: publicProcedure
+    .input(actionSchema)
+    .mutation(async ({ input }) => {
+      const username = await reddit.getCurrentUsername();
+      if (!username) {
+        return { kind: 'not-signed-in' as const };
+      }
+      return applySharedMove(username, input, Date.now());
     }),
+
+  /**
+   * Practice Tunnels — unlimited solo floors, never touching the shared run.
+   */
+  practice: publicProcedure.query(async () => {
+    const username = await reddit.getCurrentUsername();
+    const now = Date.now();
+    if (!username) {
+      return null;
+    }
+    const { id } = await ensureCurrentFloor(now);
+    return getPractice(username, id);
+  }),
+
+  practiceMove: publicProcedure
+    .input(actionSchema)
+    .mutation(async ({ input }) => {
+      const username = await reddit.getCurrentUsername();
+      const now = Date.now();
+      if (!username) {
+        return null;
+      }
+      const { id } = await ensureCurrentFloor(now);
+      return movePractice(username, id, input, now);
+    }),
+
+  practiceReset: publicProcedure.mutation(async () => {
+    const username = await reddit.getCurrentUsername();
+    const now = Date.now();
+    if (!username) {
+      return null;
+    }
+    const { id } = await ensureCurrentFloor(now);
+    return resetPractice(username, id);
+  }),
+
+  /**
+   * Past floors — the community's visible history.
+   */
+  archive: publicProcedure.query(async () => {
+    return getArchive(20);
   }),
 });
 
