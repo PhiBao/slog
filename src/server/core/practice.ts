@@ -49,7 +49,7 @@ export async function getPractice(username: string, floorId: number): Promise<Pr
 }
 
 export type PracticeMoveResult = {
-  kind: "applied" | "illegal" | "closed";
+  kind: "applied" | "illegal" | "closed" | "limited";
   view: PracticeView;
   event?: MoveEvent;
 };

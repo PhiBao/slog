@@ -324,7 +324,21 @@ export async function getSnoo(username: string): Promise<string | null> {
 }
 
 export async function setSnoo(username: string, url: string): Promise<void> {
+  // Only cache https Reddit asset URLs — never store arbitrary schemes.
+  if (!url.startsWith("https://")) return;
   await redis.set(keys.snoo(username), url, { expiration: new Date(Date.now() + 30 * 24 * 3600_000) });
+}
+
+/**
+ * Fixed-window counter for per-user mutation throttling. Returns false when
+ * the caller has exceeded `max` actions in `windowMs`.
+ */
+export async function rateLimit(key: string, max: number, windowMs: number): Promise<boolean> {
+  const n = await redis.incrBy(key, 1);
+  if (n === 1) {
+    await redis.expire(key, Math.max(1, Math.ceil(windowMs / 1000)));
+  }
+  return n <= max;
 }
 
 // ---------------------------------------------------------------------------

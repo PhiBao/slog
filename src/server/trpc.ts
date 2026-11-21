@@ -6,7 +6,7 @@ import { transformer } from '../shared/transformer';
 import type { Context } from './context';
 import { applySharedMove } from './core/moves';
 import { getPractice, movePractice, resetPractice } from './core/practice';
-import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt, getSnoo } from './core/state';
+import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt, getSnoo, rateLimit } from './core/state';
 
 /**
  * Initialization of tRPC backend
@@ -77,7 +77,15 @@ export const appRouter = t.router({
       if (!username) {
         return { kind: 'not-signed-in' as const };
       }
-      return applySharedMove(username, input, Date.now());
+      // Anti-abuse: the NX budget protects the shared run; this also caps
+      // malformed/spam request volume from a single account.
+      const now = Date.now();
+      const floor = await ensureCurrentFloor(now);
+      const bucket = Math.floor(now / 60_000);
+      if (!(await rateLimit(`slog:rl:move:${username.toLowerCase()}:${bucket}`, 15, 60_000))) {
+        return { kind: 'busy' as const, id: floor.id, state: floor.state, log: await getFloorLog(floor.id), streak: 0 };
+      }
+      return applySharedMove(username, input, now);
     }),
 
   /**
@@ -102,6 +110,11 @@ export const appRouter = t.router({
         return null;
       }
       const { id } = await ensureCurrentFloor(now);
+      // Practice is unlimited by design — this only stops automated hammering.
+      const bucket = Math.floor(now / 600_000);
+      if (!(await rateLimit(`slog:rl:practice:${username.toLowerCase()}:${bucket}`, 120, 600_000))) {
+        return { kind: 'limited' as const, view: await getPractice(username, id) };
+      }
       return movePractice(username, id, input, now);
     }),
 

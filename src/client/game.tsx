@@ -74,6 +74,7 @@ export const App = () => {
         const result = await trpc.practiceMove.mutate(action);
         if (result) setPractice(result.view);
         if (result && result.kind === 'illegal') setNotice('Solid rock — pick another way.');
+        if (result && result.kind === 'limited') setNotice('Slow down a moment — the tunnels are spam-protected.');
         return;
       }
       const result = await trpc.move.mutate(action);

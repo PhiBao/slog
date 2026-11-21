@@ -17,7 +17,10 @@ import {
   hasMoveLeft,
   nextStreak,
   openFloor,
+  rateLimit,
   setBestIfLower,
+  setSnoo,
+  getSnoo,
   setStreak,
   setFloorState,
   commitFloorUpdate,
@@ -111,6 +114,20 @@ test("nextStreak applies consecutive, grace, and reset rules", async () => {
   expect(await setBestIfLower("u_example", 31)).toBe(true);
   expect(await setBestIfLower("u_example", 55)).toBe(false);
   expect(await setBestIfLower("u_example", 31)).toBe(false);
+});
+
+test("rateLimit uses a fixed window and blocks after the cap", async () => {
+  const key = "slog:test:ratelimit";
+  for (let i = 0; i < 3; i++) expect(await rateLimit(key, 3, 60_000)).toBe(true);
+  expect(await rateLimit(key, 3, 60_000)).toBe(false);
+  expect(await rateLimit(key, 3, 60_000)).toBe(false);
+});
+
+test("snoovatar cache rejects non-https URLs", async () => {
+  await setSnoo("u_snoo", "javascript:alert(1)");
+  expect(await getSnoo("u_snoo")).toBeNull();
+  await setSnoo("u_snoo", "https://snoovatar.reddit.com/u_snoo.png");
+  expect(await getSnoo("u_snoo")).toBe("https://snoovatar.reddit.com/u_snoo.png");
 });
 
 test("archive keeps only the newest summaries", async () => {
