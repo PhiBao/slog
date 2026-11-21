@@ -203,7 +203,7 @@ export const App = () => {
 
   return (
     <div className="flex min-h-screen flex-col items-center gap-3 bg-cavern p-3 text-parchment">
-      <header className="flex w-full max-w-xl items-center justify-between gap-3 rounded-lg bg-cavern-mid px-3 py-2">
+      <header className="flex w-full max-w-xl flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-cavern-mid px-3 py-2">
         <span className="font-display text-sm text-amber">
           FLOOR #{floor.id}
           <span className="ml-2 text-xs font-normal text-parchment/60">{floor.gen.flavor}</span>
@@ -258,7 +258,7 @@ export const App = () => {
           Training Tunnels →
         </button>
         <button
-          className="btn-pixel cursor-pointer rounded-lg border-2 border-stone px-3 py-1 font-bold text-stone"
+          className="btn-pixel cursor-pointer rounded-lg border-2 border-stone px-3 py-1 font-bold text-parchment/80"
           onClick={openArchive}
         >
           Past floors
@@ -405,7 +405,8 @@ function EndCard({
 
 function boardSize() {
   if (typeof window === 'undefined') return 320;
-  return Math.max(280, Math.min(480, window.innerWidth - 48));
+  // 320px viewport: 288px board + 2×12px padding fits with room to spare.
+  return Math.max(240, Math.min(480, window.innerWidth - 32));
 }
 
 createRoot(document.getElementById('root')!).render(
