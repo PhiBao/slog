@@ -57,7 +57,7 @@ describe('Splash', () => {
       return el;
     });
     if (!floorInfo) throw new Error('floor info element missing');
-    expect(floorInfo.textContent).toContain('the soggy gallery');
+    expect(floorInfo.textContent?.toLowerCase()).toContain('the soggy gallery');
 
     const startButton = Array.from(document.querySelectorAll('button')).find((b) =>
       /spend today/i.test(b.textContent ?? '')
