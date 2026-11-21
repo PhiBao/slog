@@ -1,20 +1,17 @@
-# Slog — build & runtime artifacts
-node_modules/
-dist/
-public/assets/
+node_modules
+.yarn
+logs
 *.log
-
-# Environment & secrets — never commit
-.env
-.env.local
-.env.*.local
-
-# Devvit auth token lives at ~/.devvit/token — never in repo
-.devvit/
-
-# OS junk
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .DS_Store
-Thumbs.db
+webroot
+dist
+coverage
 
-# Test output
-coverage/
+# secrets & auth — never commit
+.env
+.env.*
+!.env.example
+.devvit/
