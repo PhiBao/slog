@@ -1,0 +1,20 @@
+# Slog — build & runtime artifacts
+node_modules/
+dist/
+public/assets/
+*.log
+
+# Environment & secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Devvit auth token lives at ~/.devvit/token — never in repo
+.devvit/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Test output
+coverage/
