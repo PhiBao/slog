@@ -39,8 +39,9 @@ export const App = () => {
       const data = await trpc.floor.query();
       setFloor(data);
       setError(null);
-    } catch {
-      setError('The cavern hiccuped. Retrying…');
+    } catch (e) {
+      console.error("floor query failed", e);
+      setError(e instanceof Error ? e.message : 'The cavern hiccuped. Retrying…');
     }
   }, []);
 

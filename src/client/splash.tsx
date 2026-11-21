@@ -17,11 +17,13 @@ export const Splash = () => {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     trpc.splash
       .query()
       .then(setInfo)
-      .catch(() => setInfo(null));
+      .catch((e: unknown) => {
+        console.error("splash query failed", e);
+        setInfo(null);
+      });
   }, []);
 
   return (

@@ -29,7 +29,9 @@ export const FLOOR_EPOCH_UTC = Date.UTC(2026, 10, 21, 12, 0, 0);
 export const FLOOR_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function floorIdAt(now: number): number {
-  return Math.floor((now - FLOOR_EPOCH_UTC) / FLOOR_WINDOW_MS) + 1;
+  // Floor #1 opens at the epoch (first 12:00 UTC after launch). Anything
+  // before it is still Floor #1 — the launch grace window.
+  return Math.max(1, Math.floor((now - FLOOR_EPOCH_UTC) / FLOOR_WINDOW_MS) + 1);
 }
 
 export function floorEndsAt(id: number): number {

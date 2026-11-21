@@ -26,6 +26,7 @@ import {
 
 test("floor id arithmetic anchors to the epoch and closes 24h later", async () => {
   expect(floorIdAt(FLOOR_EPOCH_UTC)).toBe(1);
+  expect(floorIdAt(FLOOR_EPOCH_UTC - 3600_000)).toBe(1); // launch grace: before the first reset
   expect(floorIdAt(FLOOR_EPOCH_UTC + FLOOR_WINDOW_MS - 1)).toBe(1);
   expect(floorIdAt(FLOOR_EPOCH_UTC + FLOOR_WINDOW_MS)).toBe(2);
   expect(floorEndsAt(1)).toBe(FLOOR_EPOCH_UTC + FLOOR_WINDOW_MS);
