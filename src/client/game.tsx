@@ -244,7 +244,7 @@ export const App = () => {
       {notice && <p className="max-w-md text-center text-sm text-amber">{notice}</p>}
       {error && <p className="text-sm text-rose">{error}</p>}
 
-      <LogView log={floor.log.slice(-6).reverse()} you={floor.username} />
+      <LogView log={floor.log.slice(-6).reverse()} you={floor.username} snoos={floor.snoos} />
 
       <footer className="flex flex-wrap items-center justify-center gap-3 text-sm">
         <span className="font-display text-amber" title="Your streak of floors with a move">
@@ -337,14 +337,32 @@ function Controls({ onMove, disabled }: { onMove: (action: Action) => void; disa
   );
 }
 
-function LogView({ log, you }: { log: FloorView['log']; you: string | null }) {
+function LogView({
+  log,
+  you,
+  snoos,
+}: {
+  log: FloorView['log'];
+  you: string | null;
+  snoos: Record<string, string>;
+}) {
   return (
     <div className="max-w-xl text-xs">
       <p className="mb-1 font-display text-slime">RECENT MOVES</p>
       {log.length === 0 && <p className="text-parchment/50">No moves yet today. Be the first snailherd.</p>}
       {log.map((entry, i) => (
-        <p key={`${entry.t}-${i}`} className={entry.u === you ? 'font-bold text-slime' : 'text-parchment/70'}>
-          {entry.u === 'Slog' ? '🐌 Slog crawled on his own' : `u/${entry.u}`} {entry.u === 'Slog' ? '' : directionGlyph[entry.action]}
+        <p key={`${entry.t}-${i}`} className={`flex items-center gap-1.5 ${entry.u === you ? 'font-bold text-slime' : 'text-parchment/70'}`}>
+          {entry.u === 'Slog' ? (
+            <span>🐌</span>
+          ) : snoos[entry.u] ? (
+            <img src={snoos[entry.u]} alt="" className="h-4 w-4 rounded-full" loading="lazy" />
+          ) : (
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-cavern-light text-[8px] text-amber">
+              🐌
+            </span>
+          )}
+          {entry.u === 'Slog' ? ' Slog crawled on his own' : `u/${entry.u}`}{' '}
+          {entry.u === 'Slog' ? '' : directionGlyph[entry.action]}
         </p>
       ))}
     </div>

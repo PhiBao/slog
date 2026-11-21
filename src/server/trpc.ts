@@ -6,7 +6,7 @@ import { transformer } from '../shared/transformer';
 import type { Context } from './context';
 import { applySharedMove } from './core/moves';
 import { getPractice, movePractice, resetPractice } from './core/practice';
-import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt } from './core/state';
+import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt, getSnoo } from './core/state';
 
 /**
  * Initialization of tRPC backend
@@ -53,15 +53,18 @@ export const appRouter = t.router({
     const { id, gen, state } = await ensureCurrentFloor(now);
 
     if (!username) {
-      return { id, gen, state, log: await getFloorLog(id), username: null, yourMoveLeft: false, streak: 0 };
+      return { id, gen, state, log: await getFloorLog(id), snoos: {}, username: null, yourMoveLeft: false, streak: 0 };
     }
 
-    const [log, yourMoveLeft, streak] = await Promise.all([
-      getFloorLog(id),
-      hasMoveLeft(id, username),
-      getStreak(username),
-    ]);
-    return { id, gen, state, log, username, yourMoveLeft, streak: streak.n };
+    const log = await getFloorLog(id);
+    const [yourMoveLeft, streakData] = await Promise.all([hasMoveLeft(id, username), getStreak(username)]);
+    const snoos: Record<string, string> = {};
+    for (const entry of log) {
+      if (entry.u === "Slog" || entry.u === username || snoos[entry.u]) continue;
+      const url = await getSnoo(entry.u);
+      if (url) snoos[entry.u] = url;
+    }
+    return { id, gen, state, log, snoos, username, yourMoveLeft, streak: streakData.n };
   }),
 
   /**

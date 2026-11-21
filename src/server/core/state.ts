@@ -52,6 +52,7 @@ const keys = {
   lock: (id: number) => `slog:floor:${id}:lock`,
   streak: (user: string) => `slog:user:${user.toLowerCase()}:streak`,
   best: (user: string) => `slog:user:${user.toLowerCase()}:best`,
+  snoo: (user: string) => `slog:user:${user.toLowerCase()}:snoo`,
   archive: "slog:archive",
 };
 
@@ -314,6 +315,16 @@ export async function setBestIfLower(username: string, moves: number): Promise<b
     return true;
   }
   return false;
+}
+
+/** Cached snoovatar URL (30 days) — keeps external lookups off the read path. */
+export async function getSnoo(username: string): Promise<string | null> {
+  const value = await redis.get(keys.snoo(username));
+  return value ?? null;
+}
+
+export async function setSnoo(username: string, url: string): Promise<void> {
+  await redis.set(keys.snoo(username), url, { expiration: new Date(Date.now() + 30 * 24 * 3600_000) });
 }
 
 // ---------------------------------------------------------------------------

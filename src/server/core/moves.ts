@@ -9,6 +9,8 @@
  *   - an illegal action is refunded — a stray tap never burns the daily move.
  */
 
+import { context, reddit } from "@devvit/web/server";
+
 import { hashString } from "../../shared/rng";
 import type { Action, FloorGen, FloorState, MoveLogEntry, Pos } from "../../shared/types";
 import { DIRECTIONS, isLegalMove, MAX_HP, tileAt } from "../../shared/types";
@@ -20,6 +22,7 @@ import {
   getFloorState,
   getStreak,
   nextStreak,
+  setSnoo,
   setStreak,
   trySpendMove,
   refundMove,
@@ -152,6 +155,8 @@ export async function applySharedMove(username: string, action: Action, now: num
       if (streak.last !== id) {
         const next = nextStreak(streak, id);
         await setStreak(username, next);
+        // Native identity extras — best-effort, never block the move (T14/T15).
+        await applyIdentityExtras(username, next.n);
         return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: next.n };
       }
       return { kind: "applied", id, state: outcome.state, log, event: outcome.event, streak: streak.n };
@@ -164,6 +169,30 @@ export async function applySharedMove(username: string, action: Action, now: num
   }
   const v = await view();
   return { kind: "busy", id, ...v };
+}
+
+// ---------------------------------------------------------------------------
+// Native identity extras (Should Ship / Stretch) — all failures are swallowed
+// so a Reddit API hiccup can never burn a player's move.
+// ---------------------------------------------------------------------------
+
+async function applyIdentityExtras(username: string, streakN: number): Promise<void> {
+  const subredditName = context?.subredditName;
+  if (!subredditName) return; // test harness / no request context
+
+  await Promise.allSettled([
+    reddit.setUserFlair({
+      subredditName,
+      username,
+      text: `🐌🔥${streakN}`,
+      backgroundColor: "#FFB84D",
+      textColor: "dark",
+    }),
+    (async () => {
+      const url = await reddit.getSnoovatarUrl(username);
+      if (url) await setSnoo(username, url);
+    })(),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
