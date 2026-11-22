@@ -10,7 +10,7 @@
  */
 
 import { createRng } from "./rng";
-import type { FloorGen, Pos, TileKind } from "./types";
+import type { FloorGen, Pos, TileKind, Twist } from "./types";
 
 export type FloorParams = {
   width: number;
@@ -31,6 +31,36 @@ export const DEFAULT_FLOOR_PARAMS: FloorParams = {
   maxDew: 3,
   maxMoss: 6,
 };
+
+export const TWIST_ORDER: readonly Twist[] = ["calm", "saltstorm", "dewrich", "restless"];
+
+export const TWIST_INFO: Record<Twist, { name: string; blurb: string }> = {
+  calm: { name: "The Calm Crawl", blurb: "A normal floor. Read the room and pick your step." },
+  saltstorm: { name: "Salt Storm", blurb: "Extra salt tonight — the safe route matters more." },
+  dewrich: { name: "Dew Rich", blurb: "Dew drops everywhere. Healing is on the route." },
+  restless: { name: "Restless Night", blurb: "No resting in the shell today. Every step counts." },
+};
+
+/** Which twist runs on a floor — deterministic from the floor id. */
+export function floorTwist(id: number): Twist {
+  const idx = (((id - 1) % TWIST_ORDER.length) + TWIST_ORDER.length) % TWIST_ORDER.length;
+  const picked = TWIST_ORDER[idx];
+  return picked ?? "calm";
+}
+
+/**
+ * Generation params for a floor: the daily twist plus a gentle difficulty
+ * curve (salt grows +1 every three floors, capped at +2 beyond the base).
+ */
+export function paramsForFloor(id: number, base: FloorParams = DEFAULT_FLOOR_PARAMS): FloorParams {
+  const twist = floorTwist(id);
+  const scale = Math.min(2, Math.floor((id - 1) / 3));
+  const minSalt = base.minSalt + scale + (twist === "saltstorm" ? 1 : 0);
+  const maxSalt = base.maxSalt + scale + (twist === "saltstorm" ? 2 : 0);
+  const minDew = base.minDew + (twist === "dewrich" ? 1 : 0);
+  const maxDew = base.maxDew + (twist === "dewrich" ? 2 : 0);
+  return { ...base, minSalt, maxSalt, minDew, maxDew };
+}
 
 const FLAVORS: readonly string[] = [
   "the soggy gallery",
@@ -264,7 +294,7 @@ export function generateFloor(id: number, seed: number, params: FloorParams = DE
 
   const flavor = FLAVORS[seed % FLAVORS.length] ?? "the long way down";
 
-  const gen: FloorGen = { id, seed, width, height, tiles, entrance, burrow, flavor };
+  const gen: FloorGen = { id, seed, width, height, tiles, entrance, burrow, flavor, twist: floorTwist(id) };
 
   // Regenerate with an offset seed if validation ever fails (defensive; tests
   // assert this holds across hundreds of seeds).

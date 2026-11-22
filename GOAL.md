@@ -1,26 +1,18 @@
-# GOAL — Slog
+# GOAL — Slog (improvement loop)
 
-**The goal:** Build and submit **Slog** — a daily game for Reddit's Game of the Day Hackathon (redditgameofday2026.devpost.com) — and win Best Daily Game ($15,000).
+**Mission:** Strengthen **Slog** — the submitted daily game — per the approved product plan (Phases A–E), so it is a genuine contender for Best Daily Game, not just a clever shared-state demo.
 
-**One-sentence identity:** *Every day, all of Reddit steers one brave snail through the Undervault — one move each.*
+**Why:** The submission is in, but the honest product gap is depth, individual agency, and unproven community energy. Judges who actually play will decide.
 
-**Hard deadline:** Tuesday, December 8, 2026, 6:00 PM Pacific (2026-12-09 02:00 UTC). Nothing exists after the deadline that wasn't submitted.
+**Constraint:** The Devpost submission is already filed (devpost.com/software/slog-80rlx5). Product changes improve the live game that judges will play — keep it always working; never break the core loop. No pivot, no payments/tokens, no second app, no abandoning the one-move premise.
 
-**What must be true at the deadline (definition of done):**
-1. A live Devvit Web app, uploaded (private — NOT published), running a shared daily floor in a public test subreddit with <200 members, judges can click the demo post and play their move with zero friction.
-2. A public repo with meaningful commit history, a submission-quality README, `.env.example`.
-3. A ≤60s demo video link (optional but shipped).
-4. The Devpost submission form fully completed (Reddit usernames, app page link, demo post link, ported-game question answered "No").
-5. Honesty audit: every claim in README true; no mocked behavior presented as real.
-6. Bonus paths: Devvit Helper participation in Discord/r/devvit; the official feedback survey submitted with real, actionable SDK feedback logged during the build.
+**Priorities (approved plan):**
+- **A — Validate:** confirm the noon roll, war-room reply, flair, snoovatar, two-account shared moves live. Learn from the first real players.
+- **B — One move must matter:** move preview with consequence hints; dew must have a job; a rotating daily twist; contribution roles (Finisher/Pathfinder/Medic/Salt Magnet/First); daily recap comment on floor close.
+- **C — Spectators stay in the game:** hive suggestions for players who spent their move; subscribe CTA; community status (week record, countdown); streak badges.
+- **D — Juice & difficulty:** square-tile board proportions, facing/expression states, gentle difficulty scaling, pacing from real data. Freeze after Dec 3.
+- **E — Seed a community:** real playtests in Devvit feedback threads/Discord; answer every comment; honest engagement targets (30+ snailherds, 5+ comments/day, some Day-2 returners).
 
-**Checkpoints:**
-- Walking skeleton live on a playtest subreddit: **Nov 27 EOD**
-- Feature freeze: **Dec 3 EOD** (after this only fixes, polish, docs, video, submission)
-- Submission complete (not started on the 8th): **Dec 7 EOD**
+**Hard rules:** never fake engagement or fabricate proof; never publish the app (upload+install only); don't change the one-move-per-player law; keep commits small and verified; report blockers.
 
-**Rules that can disqualify us (full quotes in `~/common/discovery/redditgameofday2026/01-rules-and-competition.md`):** must run on Devvit; do not publish the app; demo post in a public <200-member subreddit; README.md in app root; must be newly created or significantly updated during the window (ours is new); English only.
-
-**Mode:** BUILD. The build package at `~/common/discovery/redditgameofday2026/build/` is the source of truth: BUILD.md → ARCHITECTURE.md → DECISIONS.md → DESIGN.md → TASKS.md. Follow `AGENTS.md` and `FOUNDER.md` completely. One task = one commit, in order, verified before moving on.
-
-**When stuck:** after 3 genuine fix attempts on a failing verify command, stop and report the error, what was tried, and options. Never fake a sponsor/core capability. Never print or commit secrets.
+**Done when:** every phase implemented and verified live on Reddit; the game is deeper, louder, and stickier, with real community evidence accumulating; no submission-material work needed (already submitted).

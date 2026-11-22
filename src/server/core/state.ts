@@ -14,12 +14,12 @@
  *   slog:archive                   → sorted set of FloorSummary JSON, newest first
  */
 
-import { redis } from "@devvit/web/server";
+import { redis, reddit } from "@devvit/web/server";
 import { z } from "zod";
 
-import { generateFloor } from "../../shared/floor";
+import { generateFloor, paramsForFloor, floorTwist } from "../../shared/floor";
 import { floorGenSchema, floorStateSchema, floorSummarySchema, moveLogEntrySchema, streakSchema } from "../../shared/schemas";
-import { MAX_HP, type FloorGen, type FloorState, type MoveLogEntry, type FloorSummary } from "../../shared/types";
+import { MAX_HP, type Action, type FloorGen, type FloorState, type MoveLogEntry, type FloorSummary } from "../../shared/types";
 
 export const LOG_CAP = 250;
 export const ARCHIVE_CAP = 60;
@@ -84,7 +84,27 @@ export async function setCurrentFloorId(id: number): Promise<void> {
 }
 
 export async function getFloorGen(id: number): Promise<FloorGen | null> {
-  return readJson(await redis.get(keys.floorGen(id)), floorGenSchema);
+  const raw = await redis.get(keys.floorGen(id));
+  const parsed = readJson(raw, floorGenSchema);
+  if (parsed) return parsed;
+  // Migration: pre-twist floors lack the field. Patch the stored board in
+  // place so the live state (hero position) stays consistent.
+  if (raw) {
+    try {
+      const legacy: unknown = JSON.parse(raw);
+      if (legacy !== null && typeof legacy === "object") {
+        const patched = { ...(legacy as Record<string, unknown>), twist: floorTwist(id) };
+        const validated = readJson(JSON.stringify(patched), floorGenSchema);
+        if (validated) {
+          await redis.set(keys.floorGen(id), JSON.stringify(validated));
+          return validated;
+        }
+      }
+    } catch {
+      /* fall through to null */
+    }
+  }
+  return null;
 }
 
 export async function getFloorState(id: number): Promise<FloorState | null> {
@@ -118,7 +138,20 @@ export async function setFloorLastMoveAt(id: number, at: number): Promise<void> 
 }
 
 export function freshFloorState(entrance: { x: number; y: number }): FloorState {
-  return { v: 1, hero: { ...entrance }, hp: MAX_HP, moves: 0, deaths: 0, status: "open", clearedAt: null };
+  return {
+    v: 1,
+    hero: { ...entrance },
+    hp: MAX_HP,
+    moves: 0,
+    deaths: 0,
+    status: "open",
+    clearedAt: null,
+    collected: [],
+    saltBy: {},
+    medicBy: null,
+    bestStep: null,
+    finisherBy: null,
+  };
 }
 
 /**
@@ -158,7 +191,7 @@ export async function openFloor(id: number, now: number): Promise<void> {
   const existingGen = await getFloorGen(id);
   if (existingGen) return;
 
-  const gen = generateFloor(id, floorSeedFor(id));
+  const gen = generateFloor(id, floorSeedFor(id), paramsForFloor(id));
   await redis.set(keys.floorGen(id), JSON.stringify(gen));
 
   const existingState = await getFloorState(id);
@@ -182,6 +215,7 @@ export async function closeFloor(id: number, status: "cleared" | "failed", now: 
     await setFloorState(id, state);
   }
   await archiveFloor(id);
+  await maybePostRecap(id, state);
 }
 
 export async function archiveFloor(id: number): Promise<void> {
@@ -339,6 +373,83 @@ export async function rateLimit(key: string, max: number, windowMs: number): Pro
     await redis.expire(key, Math.max(1, Math.ceil(windowMs / 1000)));
   }
   return n <= max;
+}
+
+// ---------------------------------------------------------------------------
+// Hive suggestions — spectators (and movers who already spent their move) can
+// steer the conversation without spending a move themselves.
+// ---------------------------------------------------------------------------
+
+const suggestionKey = (id: number, username: string) => `slog:floor:${id}:sug:${username.toLowerCase()}`;
+const suggestionCountsKey = (id: number) => `slog:floor:${id}:sugcounts`;
+
+export async function setSuggestion(id: number, username: string, action: Action): Promise<boolean> {
+  if (action === "shell") return false; // suggestions are about movement
+  const claimed = await redis.set(suggestionKey(id, username), action, { nx: true, expiration: new Date(Date.now() + 26 * 3600_000) });
+  if (claimed !== "OK") return false;
+  await redis.hIncrBy(suggestionCountsKey(id), action, 1);
+  await redis.expire(suggestionCountsKey(id), 26 * 3600);
+  return true;
+}
+
+export async function getSuggestionCounts(id: number): Promise<Partial<Record<Action, number>>> {
+  const counts = await redis.hGetAll(suggestionCountsKey(id));
+  const out: Partial<Record<Action, number>> = {};
+  for (const [action, value] of Object.entries(counts)) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0 && action !== "shell") {
+      out[action as Action] = n;
+    }
+  }
+  return out;
+}
+
+export async function getMySuggestion(id: number, username: string): Promise<Action | null> {
+  const value = await redis.get(suggestionKey(id, username));
+  if (value && value !== "shell") return value as Action;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Daily recap — the app's own voice in the comments, once per floor
+// ---------------------------------------------------------------------------
+
+function roleLine(state: FloorState, log: MoveLogEntry[]): string {
+  const parts: string[] = [];
+  if (log.length > 0) parts.push(`✨ First: u/${log[0]?.u}`);
+  if (state.finisherBy) parts.push(`🏁 Finisher: u/${state.finisherBy}`);
+  if (state.bestStep) parts.push(`🧭 Pathfinder: u/${state.bestStep.u}`);
+  if (state.medicBy) parts.push(`💊 Medic: u/${state.medicBy}`);
+  const salty = Object.entries(state.saltBy).sort((a, b) => b[1] - a[1])[0];
+  if (salty) parts.push(`🧂 Salt Magnet: u/${salty[0]} (${salty[1]})`);
+  return parts.join(" · ");
+}
+
+/** Narrows a post id to the literal type submitComment expects. */
+function isPostId(id: string): id is `t3_${string}` {
+  return id.startsWith("t3_");
+}
+
+async function maybePostRecap(id: number, state: FloorState): Promise<void> {
+  const flag = `slog:floor:${id}:recap`;
+  const claimed = await redis.set(flag, "1", { nx: true, expiration: new Date(Date.now() + 24 * 3600_000) });
+  if (claimed !== "OK") return;
+  const postId = await redis.get(`slog:floor:${id}:postId`);
+  if (!postId || !isPostId(postId)) return;
+  const log = await getFloorLog(id);
+  const movers = new Set(log.filter((e) => e.u !== "Slog").map((e) => e.u)).size;
+  const result = state.status === "cleared" ? "CLEARED 🏁" : "RETREAT 💀";
+  const lines = [
+    `🐌 **Floor #${id} recap — ${result}**`,
+    `${state.moves} moves by ${movers} snailherd${movers === 1 ? "" : "s"} · ${state.deaths} salt incident${state.deaths === 1 ? "" : "s"} · ${state.collected.length} dew collected.`,
+    roleLine(state, log),
+    `Next floor at noon UTC. Suggest the first move in the comments.`,
+  ];
+  try {
+    await reddit.submitComment({ id: postId, text: lines.filter(Boolean).join("\n"), runAs: "APP" });
+  } catch (error) {
+    console.error("recap comment failed", error);
+  }
 }
 
 /**

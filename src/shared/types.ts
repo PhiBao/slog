@@ -25,7 +25,11 @@ export type FloorGen = {
   entrance: Pos;
   burrow: Pos;
   flavor: string;
+  twist: Twist;
 };
+
+/** Daily objective twists — one rotation per floor, always legible in the UI. */
+export type Twist = "calm" | "saltstorm" | "dewrich" | "restless";
 
 export type Action = "up" | "down" | "left" | "right" | "shell";
 
@@ -47,6 +51,16 @@ export type FloorState = {
   deaths: number;
   status: FloorStatus;
   clearedAt: number | null;
+  /** dew tiles already collected (healed) this floor */
+  collected: Pos[];
+  /** salt steps per user, for the Salt Magnet role */
+  saltBy: Record<string, number>;
+  /** first user to shell while hurt, for the Medic role */
+  medicBy: string | null;
+  /** biggest single-step progress toward the burrow, for the Pathfinder role */
+  bestStep: { u: string; gain: number } | null;
+  /** user who landed the burrow step, for the Finisher role */
+  finisherBy: string | null;
 };
 
 export type MoveLogEntry = {

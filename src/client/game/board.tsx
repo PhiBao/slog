@@ -10,7 +10,8 @@
 
 import { useEffect, useRef } from "react";
 
-import type { FloorGen, Pos } from "../../shared/types";
+import type { Action, FloorGen, Pos, TileKind } from "../../shared/types";
+import { DIRECTIONS } from "../../shared/types";
 
 const PALETTE = {
   wallDeep: "#2A1E3F",
@@ -33,17 +34,26 @@ const PALETTE = {
 export type BoardProps = {
   gen: FloorGen;
   hero: Pos;
-  size: number;
+  size: number; // css width; height derives from the grid ratio so tiles stay square
   /** recent positions of the hero (oldest → newest) used for the slime trail */
-  trail?: Pos[];
+  trail?: Pos[] | undefined;
   /** flash overlay when the hero just took damage */
-  saltFlash?: boolean;
+  saltFlash?: boolean | undefined;
+  /** dew tiles already collected this floor */
+  collected?: Pos[] | undefined;
+  /** which way Slog last traveled (for facing) */
+  facing?: Exclude<Action, "shell"> | null | undefined;
+  /** client-side consequence preview — display only, server re-validates */
+  preview?: { legal: Exclude<Action, "shell">[]; outcomes: Partial<Record<Exclude<Action, "shell">, TileKind>> } | undefined;
 };
 
-export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardProps) {
+export function Board({ gen, hero, size, trail = [], saltFlash = false, collected = [], facing = null, preview }: BoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<{ from: Pos | null; start: number }>({ from: null, start: 0 });
   const prevHero = useRef<Pos>({ ...hero });
+
+  const cssW = size;
+  const cssH = (size * gen.height) / gen.width;
 
   useEffect(() => {
     if (prevHero.current.x !== hero.x || prevHero.current.y !== hero.y) {
@@ -62,13 +72,13 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
-    canvas.width = Math.round(size * dpr);
-    canvas.height = Math.round(size * dpr);
-    canvas.style.width = `${size}px`;
-    canvas.style.height = `${size}px`;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
 
-    const tileW = (size * dpr) / gen.width;
-    const tileH = (size * dpr) / gen.height;
+    const tileW = (cssW * dpr) / gen.width;
+    const tileH = (cssH * dpr) / gen.height;
     const rnd = (x: number, y: number) => {
       // deterministic per-tile pseudo-random for art variation
       const n = Math.sin(x * 127.1 + y * 311.7 + gen.seed * 0.017) * 43758.5453;
@@ -78,7 +88,7 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
     const drawStatic = () => {
       // deep cavern background
       ctx.fillStyle = PALETTE.wallDeep;
-      ctx.fillRect(0, 0, size * dpr, size * dpr);
+      ctx.fillRect(0, 0, cssW * dpr, cssH * dpr);
 
       for (let y = 0; y < gen.height; y++) {
         for (let x = 0; x < gen.width; x++) {
@@ -114,7 +124,7 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
             ctx.fillRect(px + tileW * 0.25, py + tileH * 0.3, tileW * 0.4, tileH * 0.3);
             ctx.fillRect(px + tileW * 0.55, py + tileH * 0.6, tileW * 0.25, tileH * 0.25);
           }
-          if (kind === "dew") {
+          if (kind === "dew" && !collected.some((p) => p.x === x && p.y === y)) {
             // glinting dew drop
             ctx.fillStyle = PALETTE.slime;
             ctx.beginPath();
@@ -188,6 +198,28 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
         ctx.arc(px + tileW * 0.5, py + tileH * 0.5, tileW * 0.34, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      // move preview: ring the reachable tiles and mark what they hold
+      if (preview) {
+        for (const action of preview.legal) {
+          const d = DIRECTIONS[action];
+          const nx = hero.x + d.x;
+          const ny = hero.y + d.y;
+          if (nx < 0 || ny < 0 || nx >= gen.width || ny >= gen.height) continue;
+          const px = nx * tileW;
+          const py = ny * tileH;
+          ctx.strokeStyle = "rgba(82,214,200,0.75)";
+          ctx.lineWidth = Math.max(2, tileW * 0.06);
+          ctx.strokeRect(px + tileW * 0.12, py + tileH * 0.12, tileW * 0.76, tileH * 0.76);
+          const outcome = preview.outcomes[action];
+          ctx.fillStyle = PALETTE.parchment;
+          ctx.font = `${Math.round(tileH * 0.34)}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const glyph = outcome === "salt" ? "🧂" : outcome === "dew" ? "✦" : outcome === "burrow" ? "◎" : "";
+          if (glyph) ctx.fillText(glyph, px + tileW * 0.5, py + tileH * 0.78);
+        }
+      }
     };
 
     const drawHero = (heroPos: Pos, t: number) => {
@@ -212,7 +244,7 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
 
       ctx.save();
       ctx.translate(cx, cy + offY);
-      ctx.scale(scaleX, scaleY);
+      ctx.scale(facing === "left" ? -scaleX : scaleX, scaleY);
 
       // body
       ctx.fillStyle = PALETTE.parchment;
@@ -287,7 +319,7 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false }: BoardP
       raf = requestAnimationFrame(render);
     }
     return () => cancelAnimationFrame(raf);
-  }, [gen, hero, size, trail, saltFlash]);
+  }, [gen, hero, size, trail, saltFlash, collected, facing, preview, cssH, cssW]);
 
   return (
     <canvas

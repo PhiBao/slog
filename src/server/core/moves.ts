@@ -12,7 +12,7 @@
 import { context, reddit } from "@devvit/web/server";
 
 import { hashString } from "../../shared/rng";
-import type { Action, FloorGen, FloorState, MoveLogEntry, Pos } from "../../shared/types";
+import type { Action, FloorGen, FloorState, MoveLogEntry, Pos, Twist } from "../../shared/types";
 import { DIRECTIONS, isLegalMove, MAX_HP, tileAt } from "../../shared/types";
 import {
   commitFloorUpdate,
@@ -32,7 +32,7 @@ import {
   refundMove,
 } from "./state";
 
-export type MoveEvent = "moved" | "shell" | "salt" | "cleared" | "failed";
+export type MoveEvent = "moved" | "shell" | "salt" | "dew" | "cleared" | "failed";
 
 export type ApplyOutcome =
   | { ok: true; state: FloorState; event: MoveEvent }
@@ -43,16 +43,26 @@ const RETRIES = 3;
 
 /**
  * Pure transition for a single shared action. No I/O — fully unit-testable.
+ * `username` feeds the contribution-role counters; `twist` gates the shell.
  */
-export function applyAction(gen: FloorGen, state: FloorState, action: Action, now: number): ApplyOutcome {
+export function applyAction(
+  gen: FloorGen,
+  state: FloorState,
+  action: Action,
+  now: number,
+  username: string,
+  twist: Twist = gen.twist,
+): ApplyOutcome {
   if (state.status !== "open") return { ok: false, reason: "closed" };
 
   if (action === "shell") {
+    if (twist === "restless") return { ok: false, reason: "illegal" };
     const rested: FloorState = {
       ...state,
       v: state.v + 1,
       moves: state.moves + 1,
       hp: Math.min(state.hp + 1, MAX_HP),
+      medicBy: state.medicBy ?? (state.hp < MAX_HP ? username : null),
     };
     return { ok: true, state: rested, event: "shell" };
   }
@@ -69,9 +79,17 @@ export function applyAction(gen: FloorGen, state: FloorState, action: Action, no
   let status: FloorState["status"] = state.status;
   let deaths = state.deaths;
   let clearedAt: number | null = null;
+  const collected = [...state.collected];
+  const saltBy = { ...state.saltBy };
+  const medicBy = state.medicBy;
+  let bestStep = state.bestStep;
+  let finisherBy = state.finisherBy;
+
+  const alreadyCollected = collected.some((p) => p.x === next.x && p.y === next.y);
 
   if (tile === "salt") {
     hp -= 1;
+    saltBy[username] = (saltBy[username] ?? 0) + 1;
     if (hp <= 0) {
       event = "failed";
       status = "failed";
@@ -80,10 +98,24 @@ export function applyAction(gen: FloorGen, state: FloorState, action: Action, no
     } else {
       event = "salt";
     }
+  } else if (tile === "dew" && !alreadyCollected) {
+    // Dew is the community's medicine: heal one heart, consume the drop.
+    hp = Math.min(hp + 1, MAX_HP);
+    collected.push({ ...next });
+    event = "dew";
   } else if (tile === "burrow") {
     event = "cleared";
     status = "cleared";
     clearedAt = now;
+    finisherBy = username;
+  }
+
+  // Pathfinder: the single biggest step toward the burrow this floor.
+  const distNow = Math.abs(state.hero.x - gen.burrow.x) + Math.abs(state.hero.y - gen.burrow.y);
+  const distNext = Math.abs(next.x - gen.burrow.x) + Math.abs(next.y - gen.burrow.y);
+  const gain = distNow - distNext;
+  if (gain > 0 && (!bestStep || gain > bestStep.gain)) {
+    bestStep = { u: username, gain };
   }
 
   const nextState: FloorState = {
@@ -95,6 +127,11 @@ export function applyAction(gen: FloorGen, state: FloorState, action: Action, no
     deaths,
     status,
     clearedAt,
+    collected,
+    saltBy,
+    medicBy,
+    bestStep,
+    finisherBy,
   };
   return { ok: true, state: nextState, event };
 }
@@ -148,7 +185,7 @@ export async function applySharedMove(username: string, action: Action, now: num
 
     for (let attempt = 0; attempt < RETRIES; attempt++) {
       const current = (await getFloorState(id)) ?? state;
-      const outcome = applyAction(gen, current, action, now);
+      const outcome = applyAction(gen, current, action, now, username);
 
       if (!outcome.ok) {
         if (outcome.reason === "illegal") {

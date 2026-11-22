@@ -10,8 +10,9 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '../server/trpc';
 import { trpc } from './trpc';
 import { Board } from './game/board';
-import type { Action, Pos } from '../shared/types';
-import { DIRECTIONS } from '../shared/types';
+import type { Action, Pos, TileKind } from '../shared/types';
+import { DIRECTIONS, isLegalMove, tileAt } from '../shared/types';
+import { TWIST_INFO } from '../shared/floor';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type FloorView = RouterOutputs['floor'];
@@ -37,6 +38,11 @@ export const App = () => {
   const [archive, setArchive] = useState<ArchiveEntry[] | null>(null);
   const [showArchive, setShowArchive] = useState(false);
   const [saltFlash, setSaltFlash] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const practiceRef = useRef(false);
 
   const fetchFloor = useCallback(async () => {
@@ -143,6 +149,24 @@ export const App = () => {
     if (!archive) setArchive(await trpc.archive.query());
   };
 
+  const suggest = async (action: Action) => {
+    if (moving) return;
+    setMoving(true);
+    try {
+      const result = await trpc.suggest.mutate(action);
+      if (result && result.ok) {
+        setNotice('The hive heard you. Your suggestion is in.');
+      } else if (result && !result.ok) {
+        setNotice('You already pointed the way today.');
+      }
+      await fetchFloor();
+    } catch {
+      setNotice('The suggestion slipped away — try again.');
+    } finally {
+      setMoving(false);
+    }
+  };
+
   if (error && !floor && !practice) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cavern p-6 text-parchment">
@@ -208,13 +232,25 @@ export const App = () => {
           FLOOR #{floor.id}
           <span className="ml-2 text-xs font-normal text-parchment/60">{floor.gen.flavor}</span>
         </span>
+        <span className="rounded-full bg-cavern-light px-2 py-0.5 text-[10px] text-parchment/80" title={TWIST_INFO[floor.gen.twist]?.blurb}>
+          {TWIST_INFO[floor.gen.twist]?.name}
+        </span>
         <Hearts hp={floor.state.hp} />
         <span className="font-display text-xs text-parchment/70">
           {floor.state.moves} MOVES · {movers} SNAILHERDS
         </span>
       </header>
 
-      <Board gen={floor.gen} hero={floor.state.hero} size={boardSize()} trail={trailFrom(floor)} saltFlash={saltFlash} />
+      <Board
+        gen={floor.gen}
+        hero={floor.state.hero}
+        size={boardSize()}
+        trail={trailFrom(floor)}
+        saltFlash={saltFlash}
+        collected={floor.state.collected}
+        facing={facingFrom(floor)}
+        preview={floor.yourMoveLeft ? previewFor(floor) : undefined}
+      />
 
       {closed ? (
         <EndCard
@@ -223,6 +259,7 @@ export const App = () => {
           movers={movers}
           deaths={floor.state.deaths}
           streak={floor.streak}
+          state={floor.state}
           onPractice={enterPractice}
         />
       ) : (
@@ -239,6 +276,7 @@ export const App = () => {
               : 'Your move is spent — you’re in today’s log. 🐌'}
           </p>
           <Controls onMove={spendMove} disabled={moving || !floor.yourMoveLeft} />
+          <SuggestionBar floor={floor} onSuggest={suggest} />
         </>
       )}
 
@@ -250,6 +288,12 @@ export const App = () => {
       <footer className="flex flex-wrap items-center justify-center gap-3 text-sm">
         <span className="font-display text-amber" title="Your streak of floors with a move">
           🔥 {floor.streak}
+        </span>
+        <span className="rounded-full bg-cavern-light px-3 py-1 text-xs text-parchment/80">
+          This week: {floor.week.cleared} cleared · {floor.week.failed} lost
+        </span>
+        <span className="rounded-full bg-cavern-light px-3 py-1 text-xs text-parchment/80">
+          Next floor in {countdownToNoon(nowTick)}
         </span>
         <button
           className="btn-pixel cursor-pointer rounded-lg border-2 border-slime px-3 py-1 font-bold text-slime"
@@ -296,6 +340,39 @@ function trailFrom(floor: FloorView): Pos[] {
     visited.push({ ...pos });
   }
   return visited.slice(-40);
+}
+
+/** Client-side consequence preview — the server re-validates every move. */
+function previewFor(floor: FloorView): { legal: Exclude<Action, 'shell'>[]; outcomes: Partial<Record<Exclude<Action, 'shell'>, TileKind>> } {
+  const dirs: Exclude<Action, 'shell'>[] = ['up', 'right', 'down', 'left'];
+  const legal = dirs.filter((a) => isLegalMove(floor.gen, floor.state.hero, a));
+  const outcomes: Partial<Record<Exclude<Action, 'shell'>, TileKind>> = {};
+  for (const a of legal) {
+    const d = DIRECTIONS[a];
+    outcomes[a] = tileAt(floor.gen, { x: floor.state.hero.x + d.x, y: floor.state.hero.y + d.y });
+  }
+  return { legal, outcomes };
+}
+
+/** Last direction Slog traveled, for the facing flip. */
+function facingFrom(floor: FloorView): Exclude<Action, 'shell'> | null {
+  for (let i = floor.log.length - 1; i >= 0; i--) {
+    const entry = floor.log[i];
+    if (!entry) continue;
+    if (entry.action !== 'shell') return entry.action;
+  }
+  return null;
+}
+
+/** Time until the next noon-UTC floor. */
+function countdownToNoon(now: number): string {
+  const next = new Date(now);
+  next.setUTCHours(12, 0, 0, 0);
+  if (next.getTime() <= now) next.setUTCDate(next.getUTCDate() + 1);
+  const ms = next.getTime() - now;
+  const h = Math.floor(ms / 3600_000);
+  const m = Math.floor((ms % 3600_000) / 60_000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function Hearts({ hp }: { hp: number }) {
@@ -370,12 +447,61 @@ function LogView({
   );
 }
 
+function SuggestionBar({ floor, onSuggest }: { floor: FloorView; onSuggest: (action: Action) => void }) {
+  const counts = floor.suggestions ?? {};
+  const entries = (Object.entries(counts) as [Action, number][])
+    .filter(([action, n]) => action !== 'shell' && n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const top = entries.slice(0, 2);
+  const mine = floor.mySuggestion;
+
+  if (floor.yourMoveLeft && top.length === 0) {
+    return (
+      <p className="max-w-md text-center text-xs text-parchment/50">
+        The board is quiet. Whatever you choose, the hive will argue about it.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {top.length > 0 && (
+        <p className="text-xs text-parchment/70">
+          The hive suggests{' '}
+          {top.map(([action, n]) => (
+            <span key={action} className="font-bold text-slime">
+              {directionGlyph[action]} ({n}){' '}
+            </span>
+          ))}
+        </p>
+      )}
+      {!floor.yourMoveLeft && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-parchment/60">{mine ? `You pointed ${directionGlyph[mine]}` : 'Point the next move:'}</span>
+          {(['up', 'right', 'down', 'left'] as const).map((a) => (
+            <button
+              key={a}
+              className="btn-pixel cursor-pointer rounded-md bg-cavern-light px-2 py-1 text-sm text-parchment disabled:opacity-40"
+              disabled={Boolean(mine)}
+              onClick={() => onSuggest(a)}
+              aria-label={`Suggest ${a}`}
+            >
+              {directionGlyph[a]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EndCard({
   cleared,
   moves,
   movers,
   deaths,
   streak,
+  state,
   onPractice,
 }: {
   cleared: boolean;
@@ -383,8 +509,15 @@ function EndCard({
   movers: number;
   deaths: number;
   streak: number;
+  state: FloorView['state'];
   onPractice: () => void;
 }) {
+  const roles: string[] = [];
+  if (state.finisherBy) roles.push(`🏁 u/${state.finisherBy}`);
+  if (state.bestStep) roles.push(`🧭 u/${state.bestStep.u}`);
+  if (state.medicBy) roles.push(`💊 u/${state.medicBy}`);
+  const salty = Object.entries(state.saltBy).sort((a, b) => b[1] - a[1])[0];
+  if (salty) roles.push(`🧂 u/${salty[0]}`);
   return (
     <div className="panel max-w-xl rounded-lg p-4 text-center">
       <p className="font-display text-lg text-amber">
@@ -393,6 +526,7 @@ function EndCard({
       <p className="mt-1 text-sm text-parchment/80">
         {moves} moves · {movers} snailherds · {deaths} salt incidents · your streak 🔥 {streak}
       </p>
+      {roles.length > 0 && <p className="mt-1 text-xs text-parchment/70">{roles.join(' · ')}</p>}
       <p className="mt-1 text-sm text-parchment/60">See you at noon UTC. Mourn or gloat in the comments ↓</p>
       <div className="mt-3 flex justify-center gap-3 text-sm">
         <button className="btn-pixel cursor-pointer rounded-lg bg-amber px-4 py-2 font-bold text-ink" onClick={onPractice}>

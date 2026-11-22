@@ -107,7 +107,7 @@ export async function autoAdvance(now: number): Promise<{ stepped: boolean; reas
   for (let attempt = 0; attempt < 3; attempt++) {
     const current = await getFloorState(id);
     if (!current || current.status !== "open") return { stepped: false, reason: "closed" };
-    const outcome = applyAction(gen, current, best, now);
+    const outcome = applyAction(gen, current, best, now, AUTO_ADVANCE_LOG_NAME);
     if (!outcome.ok) return { stepped: false, reason: "illegal under current state" };
     const log = await getFloorLog(id);
     const entry: MoveLogEntry = { u: AUTO_ADVANCE_LOG_NAME, action: best, t: now };
@@ -131,3 +131,5 @@ export async function recordFloorPost(id: number, postId: string): Promise<void>
 export async function getFloorPostId(id: number): Promise<string | null> {
   return redisGet(postIdKey(id));
 }
+
+

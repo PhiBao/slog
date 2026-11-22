@@ -29,6 +29,7 @@ export const floorGenSchema = z.object({
   entrance: posSchema,
   burrow: posSchema,
   flavor: z.string().min(1),
+  twist: z.enum(["calm", "saltstorm", "dewrich", "restless"]),
 });
 
 export const floorStatusSchema = z.enum(["open", "cleared", "failed"]);
@@ -41,6 +42,11 @@ export const floorStateSchema = z.object({
   deaths: z.number().int().nonnegative(),
   status: floorStatusSchema,
   clearedAt: z.number().nullable(),
+  collected: z.array(posSchema),
+  saltBy: z.record(z.string(), z.number().int().nonnegative()),
+  medicBy: z.string().nullable(),
+  bestStep: z.object({ u: z.string(), gain: z.number() }).nullable(),
+  finisherBy: z.string().nullable(),
 });
 
 export const actionSchema = z.enum(["up", "down", "left", "right", "shell"]);

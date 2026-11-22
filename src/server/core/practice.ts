@@ -13,9 +13,9 @@ import { z } from "zod";
 
 import { generateFloor } from "../../shared/floor";
 import { practiceRecordSchema } from "../../shared/schemas";
-import { MAX_HP, type FloorGen, type FloorState } from "../../shared/types";
+import type { FloorGen, FloorState } from "../../shared/types";
 import { applyAction, practiceSeed, type MoveEvent } from "./moves";
-import { getBest, setBestIfLower } from "./state";
+import { freshFloorState, getBest, setBestIfLower } from "./state";
 
 const practiceKey = (username: string, floorId: number) => `slog:practice:${username.toLowerCase()}:${floorId}`;
 
@@ -41,9 +41,8 @@ export async function getPractice(username: string, floorId: number): Promise<Pr
   const raw = await redis.get(practiceKey(username, floorId));
   const record = readJson(raw, practiceRecordSchema);
   const attempt = record?.attempt ?? 0;
-  const state: FloorState =
-    record?.state ?? { v: 1, hero: { x: 0, y: 0 }, hp: MAX_HP, moves: 0, deaths: 0, status: "open", clearedAt: null };
   const gen = generateFloor(floorId, practiceSeed(username, floorId, attempt));
+  const state: FloorState = record?.state ?? freshFloorState(gen.entrance);
   const best = await getBest(username);
   return { floorId, attempt, gen, state, best };
 }
@@ -61,7 +60,7 @@ export async function movePractice(
   now: number
 ): Promise<PracticeMoveResult> {
   const view = await getPractice(username, floorId);
-  const outcome = applyAction(view.gen, view.state, action, now);
+  const outcome = applyAction(view.gen, view.state, action, now, username);
 
   if (!outcome.ok) {
     return { kind: outcome.reason === "closed" ? "closed" : "illegal", view };
@@ -88,7 +87,7 @@ export async function movePractice(
 export async function resetPractice(username: string, floorId: number): Promise<PracticeView> {
   const view = await getPractice(username, floorId);
   const attempt = view.attempt + 1;
-  const state: FloorState = { v: 1, hero: { x: 0, y: 0 }, hp: MAX_HP, moves: 0, deaths: 0, status: "open", clearedAt: null };
+  const state: FloorState = freshFloorState(view.gen.entrance);
   await redis.set(practiceKey(username, floorId), JSON.stringify({ attempt, state }));
   return getPractice(username, floorId);
 }

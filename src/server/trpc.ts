@@ -6,7 +6,7 @@ import { transformer } from '../shared/transformer';
 import type { Context } from './context';
 import { applySharedMove } from './core/moves';
 import { getPractice, movePractice, resetPractice } from './core/practice';
-import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt, getSnoo, rateLimit } from './core/state';
+import { ensureCurrentFloor, getArchive, getFloorLog, hasMoveLeft, getStreak, floorEndsAt, getSnoo, rateLimit, getSuggestionCounts, getMySuggestion, setSuggestion } from './core/state';
 
 /**
  * Initialization of tRPC backend
@@ -53,18 +53,29 @@ export const appRouter = t.router({
     const { id, gen, state } = await ensureCurrentFloor(now);
 
     if (!username) {
-      return { id, gen, state, log: await getFloorLog(id), snoos: {}, username: null, yourMoveLeft: false, streak: 0 };
+      return { id, gen, state, log: await getFloorLog(id), snoos: {}, username: null, yourMoveLeft: false, streak: 0, suggestions: {}, mySuggestion: null, week: { cleared: 0, failed: 0, total: 0 } };
     }
 
     const log = await getFloorLog(id);
-    const [yourMoveLeft, streakData] = await Promise.all([hasMoveLeft(id, username), getStreak(username)]);
+    const [yourMoveLeft, streakData, suggestions, mySuggestion] = await Promise.all([
+      hasMoveLeft(id, username),
+      getStreak(username),
+      getSuggestionCounts(id),
+      getMySuggestion(id, username),
+    ]);
+    const archive = await getArchive(7);
+    const week = {
+      cleared: archive.filter((e) => e.status === "cleared").length,
+      failed: archive.filter((e) => e.status === "failed").length,
+      total: archive.length,
+    };
     const snoos: Record<string, string> = {};
     for (const entry of log) {
       if (entry.u === "Slog" || entry.u === username || snoos[entry.u]) continue;
       const url = await getSnoo(entry.u);
       if (url) snoos[entry.u] = url;
     }
-    return { id, gen, state, log, snoos, username, yourMoveLeft, streak: streakData.n };
+    return { id, gen, state, log, snoos, username, yourMoveLeft, streak: streakData.n, suggestions, mySuggestion, week };
   }),
 
   /**
@@ -86,6 +97,24 @@ export const appRouter = t.router({
         return { kind: 'busy' as const, id: floor.id, state: floor.state, log: await getFloorLog(floor.id), streak: 0 };
       }
       return applySharedMove(username, input, now);
+    }),
+
+  /**
+   * Hive suggestion — anyone (including players who already moved) can point
+   * the next mover. One per user per floor; never spends a move.
+   */
+  suggest: publicProcedure
+    .input(actionSchema)
+    .mutation(async ({ input }) => {
+      const username = await reddit.getCurrentUsername();
+      const now = Date.now();
+      if (!username) {
+        return null;
+      }
+      const { id } = await ensureCurrentFloor(now);
+      const ok = await setSuggestion(id, username, input);
+      const [counts, mine] = await Promise.all([getSuggestionCounts(id), getMySuggestion(id, username)]);
+      return { id, ok, counts, mine };
     }),
 
   /**

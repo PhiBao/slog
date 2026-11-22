@@ -10,7 +10,20 @@ import { FLOOR_EPOCH_UTC, getFloorGen, getFloorState, getStreak, hasMoveLeft, op
 const NOW = FLOOR_EPOCH_UTC + 5 * 60 * 1000;
 
 function stateAt(hero: { x: number; y: number }): FloorState {
-  return { v: 1, hero: { ...hero }, hp: MAX_HP, moves: 0, deaths: 0, status: "open", clearedAt: null };
+  return {
+    v: 1,
+    hero: { ...hero },
+    hp: MAX_HP,
+    moves: 0,
+    deaths: 0,
+    status: "open",
+    clearedAt: null,
+    collected: [],
+    saltBy: {},
+    medicBy: null,
+    bestStep: null,
+    finisherBy: null,
+  };
 }
 
 describe("applyAction (pure rules)", () => {
@@ -18,7 +31,7 @@ describe("applyAction (pure rules)", () => {
     const gen = generateFloor(1, 1);
     // walk from entrance: right/down until we're on a floor tile that isn't special
     const hero = { ...gen.entrance };
-    const out = applyAction(gen, stateAt(hero), "right", NOW);
+    const out = applyAction(gen, stateAt(hero), "right", NOW, "u_tester");
     expect(out.ok).toBe(true);
     if (out.ok) {
       expect(out.state.hero.x).toBe(hero.x + 1);
@@ -30,8 +43,8 @@ describe("applyAction (pure rules)", () => {
   it("refuses to walk into walls and off the board", () => {
     const gen = generateFloor(1, 1);
     // entrance is at the top-left corner: up and left must be illegal
-    expect(applyAction(gen, stateAt(gen.entrance), "up", NOW)).toEqual({ ok: false, reason: "illegal" });
-    expect(applyAction(gen, stateAt(gen.entrance), "left", NOW)).toEqual({ ok: false, reason: "illegal" });
+    expect(applyAction(gen, stateAt(gen.entrance), "up", NOW, "u_tester")).toEqual({ ok: false, reason: "illegal" });
+    expect(applyAction(gen, stateAt(gen.entrance), "left", NOW, "u_tester")).toEqual({ ok: false, reason: "illegal" });
   });
 
   it("salt costs one heart; the third salt ends the floor communally", () => {
@@ -44,24 +57,25 @@ describe("applyAction (pure rules)", () => {
       entrance: { x: 0, y: 0 },
       burrow: { x: 2, y: 0 },
       flavor: "the salt test",
+      twist: "calm",
     };
-    const first = applyAction(gen, stateAt({ x: 0, y: 0 }), "right", NOW);
+    const first = applyAction(gen, stateAt({ x: 0, y: 0 }), "right", NOW, "u_tester");
     expect(first.ok && first.event === "salt").toBe(true);
     expect(first.ok ? first.state.hp : 0).toBe(2);
 
-    const second = applyAction(gen, first.ok ? first.state : stateAt({ x: 0, y: 0 }), "left", NOW);
+    const second = applyAction(gen, first.ok ? first.state : stateAt({ x: 0, y: 0 }), "left", NOW, "u_tester");
     expect(second.ok && second.event === "moved").toBe(true);
-    const third = applyAction(gen, second.ok ? second.state : stateAt({ x: 0, y: 0 }), "right", NOW);
+    const third = applyAction(gen, second.ok ? second.state : stateAt({ x: 0, y: 0 }), "right", NOW, "u_tester");
     expect(third.ok && third.state.hp).toBe(1);
 
-    const fourth = applyAction(gen, third.ok ? third.state : stateAt({ x: 0, y: 0 }), "left", NOW);
-    const fifth = applyAction(gen, fourth.ok ? fourth.state : stateAt({ x: 0, y: 0 }), "right", NOW);
+    const fourth = applyAction(gen, third.ok ? third.state : stateAt({ x: 0, y: 0 }), "left", NOW, "u_tester");
+    const fifth = applyAction(gen, fourth.ok ? fourth.state : stateAt({ x: 0, y: 0 }), "right", NOW, "u_tester");
     expect(fifth.ok && fifth.state.hp).toBe(0);
     expect(fifth.ok && fifth.state.status).toBe("failed");
     expect(fifth.ok && fifth.state.deaths).toBe(1);
 
     // a closed floor accepts no moves
-    const after = applyAction(gen, fifth.ok ? fifth.state : stateAt({ x: 0, y: 0 }), "left", NOW);
+    const after = applyAction(gen, fifth.ok ? fifth.state : stateAt({ x: 0, y: 0 }), "left", NOW, "u_tester");
     expect(after).toEqual({ ok: false, reason: "closed" });
   });
 
@@ -75,9 +89,10 @@ describe("applyAction (pure rules)", () => {
       entrance: { x: 0, y: 0 },
       burrow: { x: 2, y: 0 },
       flavor: "the clear test",
+      twist: "calm",
     };
-    const a = applyAction(gen, stateAt({ x: 0, y: 0 }), "right", NOW);
-    const b = applyAction(gen, a.ok ? a.state : stateAt({ x: 0, y: 0 }), "right", NOW);
+    const a = applyAction(gen, stateAt({ x: 0, y: 0 }), "right", NOW, "u_tester");
+    const b = applyAction(gen, a.ok ? a.state : stateAt({ x: 0, y: 0 }), "right", NOW, "u_tester");
     expect(b.ok && b.event).toBe("cleared");
     expect(b.ok ? b.state.status : "").toBe("cleared");
     expect(b.ok ? b.state.clearedAt : 0).toBe(NOW);
@@ -86,11 +101,69 @@ describe("applyAction (pure rules)", () => {
   it("shell rests and heals one heart, capped at max", () => {
     const gen = generateFloor(1, 1);
     const hurt: FloorState = { ...stateAt(gen.entrance), hp: 2 };
-    const out = applyAction(gen, hurt, "shell", NOW);
+    const out = applyAction(gen, hurt, "shell", NOW, "u_tester");
     expect(out.ok && out.state.hp).toBe(3);
     expect(out.ok && out.state.hero).toEqual(gen.entrance);
-    const full = applyAction(gen, out.ok ? out.state : hurt, "shell", NOW);
+    const full = applyAction(gen, out.ok ? out.state : hurt, "shell", NOW, "u_tester");
     expect(full.ok && full.state.hp).toBe(MAX_HP);
+  });
+
+  it("dew heals one heart and is consumed — a second step gives nothing", () => {
+    const gen: FloorGen = {
+      id: 1,
+      seed: 3,
+      width: 3,
+      height: 1,
+      tiles: [["entrance", "dew", "burrow"]],
+      entrance: { x: 0, y: 0 },
+      burrow: { x: 2, y: 0 },
+      flavor: "the dew test",
+      twist: "calm",
+    };
+    const hurt: FloorState = { ...stateAt({ x: 0, y: 0 }), hp: 2 };
+    const first = applyAction(gen, hurt, "right", NOW, "u_medic");
+    expect(first.ok && first.event).toBe("dew");
+    expect(first.ok ? first.state.hp : 0).toBe(3);
+    expect(first.ok ? first.state.collected.length : 0).toBe(1);
+    expect(first.ok ? first.state.medicBy : null).toBeNull(); // shell is what makes a medic
+
+    // walk back onto the same tile: no second heal
+    const back = applyAction(gen, first.ok ? first.state : hurt, "left", NOW, "u_medic");
+    expect(back.ok && back.state.hp).toBe(3);
+  });
+
+  it("the restless twist forbids resting in the shell", () => {
+    const gen = generateFloor(1, 1);
+    const out = applyAction(gen, stateAt(gen.entrance), "shell", NOW, "u_tester", "restless");
+    expect(out).toEqual({ ok: false, reason: "illegal" });
+  });
+
+  it("tracks contribution roles: finisher, salt magnet, pathfinder, medic", () => {
+    const gen: FloorGen = {
+      id: 1,
+      seed:4,
+      width: 3,
+      height: 1,
+      tiles: [["entrance", "floor", "burrow"]],
+      entrance: { x: 0, y: 0 },
+      burrow: { x: 2, y: 0 },
+      flavor: "the roles test",
+      twist: "calm",
+    };
+    const a = applyAction(gen, stateAt({ x: 0, y: 0 }), "right", NOW, "u_path");
+    expect(a.ok && a.state.bestStep?.u).toBe("u_path");
+
+    const b = applyAction(gen, a.ok ? a.state : stateAt({ x: 0, y: 0 }), "right", NOW, "u_fin");
+    expect(b.ok && b.event).toBe("cleared");
+    expect(b.ok ? b.state.finisherBy : null).toBe("u_fin");
+
+    const saltGen: FloorGen = { ...gen, tiles: [["entrance", "salt", "floor"]] };
+    const c = applyAction(saltGen, stateAt({ x: 0, y: 0 }), "right", NOW, "u_salty");
+    expect(c.ok && c.state.saltBy["u_salty"]).toBe(1);
+
+    const hurt: FloorState = { ...stateAt({ x: 0, y: 0 }), hp: 2 };
+    const d = applyAction(gen, hurt, "shell", NOW, "u_nurse");
+    expect(d.ok ? d.state.medicBy : null).toBe("u_nurse");
   });
 });
 
