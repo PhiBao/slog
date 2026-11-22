@@ -108,7 +108,35 @@ export async function getFloorGen(id: number): Promise<FloorGen | null> {
 }
 
 export async function getFloorState(id: number): Promise<FloorState | null> {
-  return readJson(await redis.get(keys.floorState(id)), floorStateSchema);
+  const raw = await redis.get(keys.floorState(id));
+  const parsed = readJson(raw, floorStateSchema);
+  if (parsed) return parsed;
+  // Migration: pre-roles states lack the new counters. Patch in place so the
+  // live run (hero, hearts, log) keeps its history.
+  if (raw) {
+    try {
+      const legacy: unknown = JSON.parse(raw);
+      if (legacy !== null && typeof legacy === "object") {
+        const base = legacy as Record<string, unknown>;
+        const patched = {
+          ...base,
+          collected: Array.isArray(base.collected) ? base.collected : [],
+          saltBy: base.saltBy && typeof base.saltBy === "object" ? base.saltBy : {},
+          medicBy: typeof base.medicBy === "string" ? base.medicBy : null,
+          bestStep: base.bestStep ?? null,
+          finisherBy: typeof base.finisherBy === "string" ? base.finisherBy : null,
+        };
+        const validated = readJson(JSON.stringify(patched), floorStateSchema);
+        if (validated) {
+          await redis.set(keys.floorState(id), JSON.stringify(validated));
+          return validated;
+        }
+      }
+    } catch {
+      /* fall through to null */
+    }
+  }
+  return null;
 }
 
 export async function setFloorState(id: number, state: FloorState): Promise<void> {
