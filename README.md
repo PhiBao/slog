@@ -124,7 +124,7 @@ On this particular WSL machine the system DNS poisons `www.reddit.com`, so the r
 
 ## Demo
 
-- **Live demo:** [arena post](https://www.reddit.com/r/slogslogslog_dev/comments/1y1qo2g/slog_floor_1_the_long_way_down/) in the public 1-member r/slogslogslog_dev (well under the 200-member judging limit).
+- **Live demo:** [arena post](https://www.reddit.com/r/slogslogslog_dev/comments/1y1qo2g/slog_floor_1_the_long_way_down/) in the public 2-member r/slogslogslog_dev (well under the 200-member judging limit).
 - **Flow:** open post → tap "Spend today's move" → press a direction → name appears in log → open Training Tunnels → clear a practice floor → Past floors.
 - **Required setup:** a Reddit account. No wallet, no API key, no local installation.
 - **Judge should try first:** make one shared move and refresh the post 30 seconds later to see another player's move in the log.
