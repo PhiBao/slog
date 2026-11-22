@@ -292,7 +292,9 @@ export function generateFloor(id: number, seed: number, params: FloorParams = DE
     mossPlaced++;
   }
 
-  const flavor = FLAVORS[seed % FLAVORS.length] ?? "the long way down";
+  // Flavor rotates by floor id (not by seed) so consecutive days never repeat
+  // the same room name — daily variety should be visible at a glance.
+  const flavor = FLAVORS[(id - 1) % FLAVORS.length] ?? "the long way down";
 
   const gen: FloorGen = { id, seed, width, height, tiles, entrance, burrow, flavor, twist: floorTwist(id) };
 
