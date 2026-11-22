@@ -201,7 +201,13 @@ export const App = () => {
             TRAINING TUNNEL · UNLIMITED MOVES · BEST: {practice.best ? `${practice.best} MOVES` : '—'}
           </p>
         </header>
-        <Board gen={practice.gen} hero={practice.state.hero} size={boardSize()} />
+        <Board
+          gen={practice.gen}
+          hero={practice.state.hero}
+          size={boardSize()}
+          collected={practice.state.collected}
+          preview={practice.state.status === 'open' ? previewForGen(practice.gen, practice.state.hero) : undefined}
+        />
         <Hearts hp={practice.state.hp} />
         <Controls onMove={spendMove} disabled={moving || practice.state.status !== 'open'} />
         {notice && <p className="max-w-md text-center text-sm text-amber">{notice}</p>}
@@ -343,15 +349,22 @@ function trailFrom(floor: FloorView): Pos[] {
 }
 
 /** Client-side consequence preview — the server re-validates every move. */
-function previewFor(floor: FloorView): { legal: Exclude<Action, 'shell'>[]; outcomes: Partial<Record<Exclude<Action, 'shell'>, TileKind>> } {
+function previewForGen(
+  gen: FloorView['gen'],
+  hero: Pos,
+): { legal: Exclude<Action, 'shell'>[]; outcomes: Partial<Record<Exclude<Action, 'shell'>, TileKind>> } {
   const dirs: Exclude<Action, 'shell'>[] = ['up', 'right', 'down', 'left'];
-  const legal = dirs.filter((a) => isLegalMove(floor.gen, floor.state.hero, a));
+  const legal = dirs.filter((a) => isLegalMove(gen, hero, a));
   const outcomes: Partial<Record<Exclude<Action, 'shell'>, TileKind>> = {};
   for (const a of legal) {
     const d = DIRECTIONS[a];
-    outcomes[a] = tileAt(floor.gen, { x: floor.state.hero.x + d.x, y: floor.state.hero.y + d.y });
+    outcomes[a] = tileAt(gen, { x: hero.x + d.x, y: hero.y + d.y });
   }
   return { legal, outcomes };
+}
+
+function previewFor(floor: FloorView) {
+  return previewForGen(floor.gen, floor.state.hero);
 }
 
 /** Last direction Slog traveled, for the facing flip. */

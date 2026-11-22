@@ -13,6 +13,8 @@ import {
   openFloor,
   setFloorLastMoveAt,
   setFloorState,
+  closeFloor,
+  getArchive,
 } from './state';
 import { generateFloor } from '../../shared/floor';
 
@@ -118,4 +120,20 @@ test('a floor rolls over cleanly at the next noon-UTC window', async () => {
   const floor2 = await getFloorState(2);
   expect(floor2?.status).toBe('open');
   expect(floor2?.hero).toEqual({ x: 0, y: 0 });
+});
+
+test('closeFloor archives and never crashes when the recap comment cannot post', async () => {
+  const now = FLOOR_EPOCH_UTC + 10 * MIN;
+  await openFloor(1, now);
+  const state = await getFloorState(1);
+  expect(state).not.toBeNull();
+  if (!state) return;
+  await setFloorState(1, { ...state, status: 'open', moves: 7, deaths: 1, finisherBy: 'u_test', saltBy: { u_test: 1 } });
+
+  // no arena post is recorded for this test floor → the recap must skip silently
+  await closeFloor(1, 'cleared', now + MIN);
+  const after = await getFloorState(1);
+  expect(after?.status).toBe('cleared');
+  const archive = await getArchive(5);
+  expect(archive.some((e) => e.id === 1)).toBe(true);
 });

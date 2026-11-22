@@ -97,6 +97,11 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false, collecte
           const py = y * tileH;
           const r = rnd(x, y);
 
+          // tile seam — one dark pixel line so the maze structure reads instantly
+          ctx.strokeStyle = "rgba(36,27,53,0.35)";
+          ctx.lineWidth = Math.max(1, tileW * 0.03);
+          ctx.strokeRect(px, py, tileW, tileH);
+
           if (kind === "wall") {
             // rocky wall with lantern-lit top edge variation
             ctx.fillStyle = r > 0.5 ? PALETTE.wallMid : PALETTE.wallDeep;
@@ -246,16 +251,29 @@ export function Board({ gen, hero, size, trail = [], saltFlash = false, collecte
       ctx.translate(cx, cy + offY);
       ctx.scale(facing === "left" ? -scaleX : scaleX, scaleY);
 
-      // body
-      ctx.fillStyle = PALETTE.parchment;
+      // amber halo so the hero pops off the plum cavern
+      const halo = ctx.createRadialGradient(0, 0, tileW * 0.2, 0, 0, tileW * 0.75);
+      halo.addColorStop(0, "rgba(255,184,77,0.35)");
+      halo.addColorStop(1, "rgba(255,184,77,0)");
+      ctx.fillStyle = halo;
       ctx.beginPath();
-      ctx.ellipse(0, tileH * 0.05, tileW * 0.42, tileH * 0.3, 0, 0, Math.PI * 2);
+      ctx.arc(0, 0, tileW * 0.75, 0, Math.PI * 2);
       ctx.fill();
+
+      // body with a strong ink outline
+      ctx.fillStyle = PALETTE.parchment;
+      ctx.strokeStyle = PALETTE.ink;
+      ctx.lineWidth = Math.max(2, tileW * 0.07);
+      ctx.beginPath();
+      ctx.ellipse(0, tileH * 0.05, tileW * 0.46, tileH * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
       // shell
       ctx.fillStyle = PALETTE.amber;
       ctx.beginPath();
-      ctx.arc(-tileW * 0.05, -tileH * 0.06, tileW * 0.32, 0, Math.PI * 2);
+      ctx.arc(-tileW * 0.05, -tileH * 0.06, tileW * 0.36, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
       ctx.strokeStyle = PALETTE.ink;
       ctx.lineWidth = Math.max(1.5, tileW * 0.05);
       ctx.beginPath();
