@@ -458,12 +458,21 @@ function isPostId(id: string): id is `t3_${string}` {
   return id.startsWith("t3_");
 }
 
+/** Reddit ids come both bare ("1y1qo2g") and prefixed ("t3_1y1qo2g"). */
+export function bareId(id: string): string {
+  return id.replace(/^t[13]_/, "");
+}
+
+function asPostId(id: string): `t3_${string}` {
+  return isPostId(id) ? id : `t3_${id}`;
+}
+
 async function maybePostRecap(id: number, state: FloorState): Promise<void> {
   const flag = `slog:floor:${id}:recap`;
   const claimed = await redis.set(flag, "1", { nx: true, expiration: new Date(Date.now() + 24 * 3600_000) });
   if (claimed !== "OK") return;
   const postId = await redis.get(`slog:floor:${id}:postId`);
-  if (!postId || !isPostId(postId)) return;
+  if (!postId) return;
   const log = await getFloorLog(id);
   const movers = new Set(log.filter((e) => e.u !== "Slog").map((e) => e.u)).size;
   const result = state.status === "cleared" ? "CLEARED 🏁" : "RETREAT 💀";
@@ -474,7 +483,7 @@ async function maybePostRecap(id: number, state: FloorState): Promise<void> {
     `Next floor at noon UTC. Suggest the first move in the comments.`,
   ];
   try {
-    await reddit.submitComment({ id: postId, text: lines.filter(Boolean).join("\n"), runAs: "APP" });
+    await reddit.submitComment({ id: asPostId(postId), text: lines.filter(Boolean).join("\n"), runAs: "APP" });
   } catch (error) {
     console.error("recap comment failed", error);
   }

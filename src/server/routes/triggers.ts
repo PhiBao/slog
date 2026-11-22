@@ -4,7 +4,7 @@ import type { OnAppInstallRequest, OnCommentCreateRequest, TriggerResponse } fro
 import { redis } from '@devvit/web/server';
 
 import { getFloorPostId } from '../core/daily';
-import { ensureCurrentFloor, getFloorLog, hasMoveLeft, floorIdAt } from '../core/state';
+import { ensureCurrentFloor, getFloorLog, hasMoveLeft, floorIdAt, bareId } from '../core/state';
 
 export const triggers = new Hono();
 
@@ -68,7 +68,7 @@ triggers.post('/on-comment-create', async (c) => {
     let floorId: number | null = null;
     for (let id = todayId; id >= todayId - 2 && id >= 1; id--) {
       const arenaPostId = await getFloorPostId(id);
-      if (arenaPostId === postId) {
+      if (arenaPostId && bareId(arenaPostId) === bareId(postId)) {
         floorId = id;
         break;
       }
